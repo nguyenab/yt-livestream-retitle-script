@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import logging
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Callable
+from zoneinfo import ZoneInfo
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from app import state as state_mod
+from app import telegram, youtube
+from app.config import Config, load_config
+from app.jobs import JobReport, backdate_all, weekly_job
+from app.notify import format_report, format_status
+
+log = logging.getLogger("yt-retitle")
+
+HELP_TEXT = (
+    "Commands:\n"
+    "/status — last run, next run, errors\n"
+    "/run — run the weekly job now\n"
+    "/backdate — retitle all past livestreams (idempotent)\n"
+    "/help — this message"
+)
+
+
+@dataclass
+class Context:
+    config: Config
+    service: object
+    scheduler: object
+    started_at: str
+    send: Callable[[str], None]
+    next_run: Callable[[], str]
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _record(report: JobReport) -> None:
+    state = state_mod.load_state()
+    state["last_run_at"] = _now_iso()
+    state["last_result"] = f"changed {report.changed}, failures {len(report.failures)}"
+    state["last_error"] = report.failures[0] if report.failures else None
+    state_mod.save_state(state)
+
+
+def _run_and_report(ctx: Context, title: str, fn) -> None:
+    try:
+        report = fn(ctx.service, ctx.config)
+        _record(report)
+        ctx.send(format_report(title, report))
+    except Exception as e:  # noqa: BLE001 - never let a job crash the daemon
+        log.exception("%s failed", title)
+        state = state_mod.load_state()
+        state["last_error"] = f"{title}: {e}"
+        state_mod.save_state(state)
+        ctx.send(f"⚠ {title} failed: {e}")
+
+
+def handle_command(ctx: Context, chat_id: str, text: str) -> None:
+    if str(chat_id) != str(ctx.config.telegram_chat_id):
+        log.warning("ignoring command from unauthorized chat %s", chat_id)
+        return
+    cmd = text.strip().split()[0].lower() if text.strip() else ""
+    if cmd == "/status":
+        ctx.send(format_status(state_mod.load_state(), ctx.next_run(), ctx.started_at))
+    elif cmd == "/help":
+        ctx.send(HELP_TEXT)
+    elif cmd == "/run":
+        ctx.send("Running weekly job…")
+        _run_and_report(ctx, "Weekly run (manual)", weekly_job)
+    elif cmd == "/backdate":
+        ctx.send("Starting backdate of all past livestreams…")
+        _run_and_report(ctx, "Backdate", backdate_all)
+    else:
+        ctx.send(f"Unknown command: {cmd}\n\n{HELP_TEXT}")
+
+
+def _scheduled_weekly(ctx: Context) -> None:
+    _run_and_report(ctx, "Weekly run", weekly_job)
+
+
+def main() -> None:
+    config = load_config()
+    logging.basicConfig(
+        level=getattr(logging, config.log_level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stdout,
+    )
+    service = youtube.build_service(
+        config.youtube_client_id,
+        config.youtube_client_secret,
+        config.youtube_refresh_token,
+    )
+
+    scheduler = BackgroundScheduler(timezone=config.timezone)
+
+    def next_run() -> str:
+        jobs = scheduler.get_jobs()
+        if jobs and jobs[0].next_run_time:
+            return jobs[0].next_run_time.strftime("%Y-%m-%d %H:%M %Z")
+        return "unscheduled"
+
+    def send(text: str) -> None:
+        try:
+            telegram.send_message(config.telegram_bot_token, config.telegram_chat_id, text)
+        except Exception:  # noqa: BLE001
+            log.exception("failed to send Telegram message")
+
+    ctx = Context(
+        config=config,
+        service=service,
+        scheduler=scheduler,
+        started_at=_now_iso(),
+        send=send,
+        next_run=next_run,
+    )
+
+    scheduler.add_job(
+        lambda: _scheduled_weekly(ctx),
+        CronTrigger(
+            day_of_week=config.schedule_day,
+            hour=config.schedule_hour,
+            minute=0,
+            timezone=ZoneInfo(config.timezone),
+        ),
+        id="weekly",
+    )
+    scheduler.start()
+    send(f"✅ yt-retitle started. Next weekly run: {next_run()}"
+         + (" (DRY_RUN)" if config.dry_run else ""))
+
+    offset = None
+    log.info("entering Telegram poll loop")
+    while True:
+        try:
+            updates = telegram.get_updates(config.telegram_bot_token, offset=offset, timeout=30)
+            for upd in updates:
+                offset = upd["update_id"] + 1
+                msg = upd.get("message") or upd.get("edited_message")
+                if not msg:
+                    continue
+                chat_id = msg.get("chat", {}).get("id")
+                text = msg.get("text", "")
+                if text:
+                    handle_command(ctx, chat_id, text)
+        except Exception:  # noqa: BLE001 - keep polling through transient errors
+            log.exception("poll loop error; backing off 10s")
+            time.sleep(10)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="YouTube livestream auto-retitle")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["serve", "backdate", "weekly"],
+        default="serve",
+        help="serve (default daemon), backdate (one-shot), weekly (one-shot)",
+    )
+    args = parser.parse_args()
+
+    if args.command == "serve":
+        main()
+    else:
+        cfg = load_config()
+        logging.basicConfig(level=getattr(logging, cfg.log_level, logging.INFO), stream=sys.stdout)
+        svc = youtube.build_service(
+            cfg.youtube_client_id, cfg.youtube_client_secret, cfg.youtube_refresh_token
+        )
+        fn = backdate_all if args.command == "backdate" else weekly_job
+        rep = fn(svc, cfg)
+        print(format_report(args.command, rep))
+        try:
+            telegram.send_message(
+                cfg.telegram_bot_token, cfg.telegram_chat_id, format_report(args.command, rep)
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("failed to send Telegram report")
