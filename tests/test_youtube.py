@@ -147,12 +147,31 @@ def test_list_broadcasts_dedupes_same_id_across_statuses():
     ]
 
 
+def test_list_broadcasts_handles_response_without_items_key():
+    service = _make_service([{}])  # no "items", no "nextPageToken"
+    assert list_broadcasts(service, ["all"]) == []
+
+
+def test_list_via_uploads_handles_videos_response_without_items():
+    channel = {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UUx"}}}]}
+    playlist_pages = [{"items": [{"contentDetails": {"videoId": "v1"}}]}]
+    video_pages = [{}]  # videos.list returns no "items"
+    svc = _uploads_service(channel, playlist_pages, video_pages)
+    assert list_livestreams_via_uploads(svc) == []
+
+
 def test_get_video_snippet_returns_snippet():
     service = MagicMock()
     service.videos.return_value.list.return_value.execute.return_value = {
         "items": [{"snippet": {"title": "A", "categoryId": "22"}}]
     }
     assert get_video_snippet(service, "v1") == {"title": "A", "categoryId": "22"}
+
+
+def test_get_video_snippet_returns_none_when_no_items():
+    service = MagicMock()
+    service.videos.return_value.list.return_value.execute.return_value = {}
+    assert get_video_snippet(service, "v1") is None
 
 
 def test_update_title_sets_title_and_preserves_snippet():

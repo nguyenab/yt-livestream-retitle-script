@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.retitle import Broadcast, Change, decide
 
@@ -36,3 +36,19 @@ def test_decide_backdate_mode_includes_old():
     changes = decide([old], [BASE], TZ, window_days=None)
     assert len(changes) == 1
     assert changes[0].new_title.startswith("Sunday, January 7th, 2024 - ")
+
+
+def test_decide_window_includes_stream_exactly_at_edge():
+    now = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    edge_iso = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")  # exactly 7 days back
+    b = Broadcast("v1", BASE, edge_iso)
+    changes = decide([b], [BASE], TZ, window_days=7, now_utc=now)
+    assert [c.video_id for c in changes] == ["v1"]
+
+
+def test_decide_window_excludes_stream_just_before_edge():
+    now = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    before_iso = (now - timedelta(days=7, seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    b = Broadcast("v1", BASE, before_iso)
+    changes = decide([b], [BASE], TZ, window_days=7, now_utc=now)
+    assert changes == []
