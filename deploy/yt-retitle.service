@@ -1,0 +1,16 @@
+[Unit]
+Description=YouTube Livestream Auto-Retitle Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/yt-retitle
+ExecStart=/opt/yt-retitle/.venv/bin/python -m app.main serve
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
