@@ -20,6 +20,7 @@ class Config:
     recent_window_days: int
     dry_run: bool
     log_level: str
+    log_file: str
 
 
 def _require(name: str) -> str:
@@ -45,4 +46,5 @@ def load_config() -> Config:
         recent_window_days=int(os.getenv("RECENT_WINDOW_DAYS", "7")),
         dry_run=os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes"),
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
+        log_file=os.getenv("LOG_FILE", "").strip(),
     )

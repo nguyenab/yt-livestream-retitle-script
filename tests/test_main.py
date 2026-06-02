@@ -157,3 +157,17 @@ def test_is_conflict_false_for_other_status():
 
 def test_is_conflict_false_when_no_response():
     assert main._is_conflict(RuntimeError("network")) is False
+
+
+def test_make_file_handler_configures_rotation(tmp_path):
+    import logging
+
+    path = str(tmp_path / "app.log")
+    handler = main._make_file_handler(path, logging.INFO)
+    try:
+        assert handler.maxBytes == 1_000_000
+        assert handler.backupCount == 5
+        assert handler.level == logging.INFO
+        assert handler.baseFilename == path  # tmp_path is absolute
+    finally:
+        handler.close()

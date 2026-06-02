@@ -32,6 +32,7 @@ sudo systemctl restart yt-retitle
 | `RECENT_WINDOW_DAYS` | Weekly scan window, default `7` |
 | `DRY_RUN` | `true` = preview only (no writes). Start here. |
 | `LOG_LEVEL` | `INFO` default |
+| `LOG_FILE` | Optional path for a rotating file log (1 MB x 5). Empty = stdout/journald only |
 
 ## Commands
 

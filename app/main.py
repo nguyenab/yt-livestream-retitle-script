@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,6 +19,16 @@ from app.jobs import JobReport, backdate_all, weekly_job
 from app.notify import format_report, format_status
 
 log = logging.getLogger("yt-retitle")
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+
+
+def _make_file_handler(path: str, level: int) -> RotatingFileHandler:
+    """A rotating file handler (1 MB x 5 backups) with the standard log format."""
+    handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    return handler
 
 HELP_TEXT = (
     "Commands:\n"
@@ -139,11 +150,11 @@ def _drain_pending_updates(token: str) -> int | None:
 
 def main() -> None:
     config = load_config()
-    logging.basicConfig(
-        level=getattr(logging, config.log_level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        stream=sys.stdout,
-    )
+    level = getattr(logging, config.log_level, logging.INFO)
+    logging.basicConfig(level=level, format=_LOG_FORMAT, stream=sys.stdout)
+    if config.log_file:
+        logging.getLogger().addHandler(_make_file_handler(config.log_file, level))
+        log.info("also logging to %s", config.log_file)
     service = youtube.build_service(
         config.youtube_client_id,
         config.youtube_client_secret,
