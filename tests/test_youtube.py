@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock
 
 from app.youtube import (
+    get_video_snippet,
     list_broadcasts,
     list_livestreams_via_uploads,
-    get_video_snippet,
     update_title,
 )
 

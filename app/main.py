@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Callable
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -39,7 +39,7 @@ class Context:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _record(report: JobReport) -> None:
@@ -202,7 +202,7 @@ def main() -> None:
                 handle_command(ctx, parsed[0], parsed[1])
         except Exception as e:  # noqa: BLE001 - keep polling through transient errors
             if _is_conflict(e):
-                log.error("Telegram getUpdates 409 Conflict — another instance is polling this token")
+                log.error("Telegram 409 Conflict — another poller holds this bot token")
                 if not conflict_alerted:
                     send(
                         "⚠ Telegram conflict (409): another process is polling this bot token. "

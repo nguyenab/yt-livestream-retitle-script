@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.retitle import Broadcast, Change, decide
 
 BASE = "Lễ thờ phượng - Worship Service - Hội Thánh Tin Lành Ân Điển"
 TZ = "America/Los_Angeles"
-NOW = datetime(2026, 5, 11, 0, 0, tzinfo=timezone.utc)  # Sunday night UTC
+NOW = datetime(2026, 5, 11, 0, 0, tzinfo=UTC)  # Sunday night UTC
 
 
 def test_decide_prepends_date_to_matching_dateless():
@@ -39,7 +39,7 @@ def test_decide_backdate_mode_includes_old():
 
 
 def test_decide_window_includes_stream_exactly_at_edge():
-    now = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
     edge_iso = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")  # exactly 7 days back
     b = Broadcast("v1", BASE, edge_iso)
     changes = decide([b], [BASE], TZ, window_days=7, now_utc=now)
@@ -47,7 +47,7 @@ def test_decide_window_includes_stream_exactly_at_edge():
 
 
 def test_decide_window_excludes_stream_just_before_edge():
-    now = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
     before_iso = (now - timedelta(days=7, seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     b = Broadcast("v1", BASE, before_iso)
     changes = decide([b], [BASE], TZ, window_days=7, now_utc=now)

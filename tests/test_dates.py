@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.dates import (
+    _ordinal,
     format_date_prefix,
     has_date_prefix,
-    strip_date_prefix,
     parse_iso_utc,
-    _ordinal,
+    strip_date_prefix,
 )
 
 
@@ -25,13 +25,13 @@ def test_ordinals():
 
 def test_format_date_prefix_pacific():
     # 2026-05-10 18:00 UTC -> 11:00 PDT, still May 10 (a Sunday)
-    dt = datetime(2026, 5, 10, 18, 0, tzinfo=timezone.utc)
+    dt = datetime(2026, 5, 10, 18, 0, tzinfo=UTC)
     assert format_date_prefix(dt, "America/Los_Angeles") == "Sunday, May 10th, 2026 - "
 
 
 def test_format_date_prefix_crosses_day_in_pacific():
     # 2025-05-11 01:30 UTC -> 2025-05-10 18:30 PDT (Saturday)
-    dt = datetime(2025, 5, 11, 1, 30, tzinfo=timezone.utc)
+    dt = datetime(2025, 5, 11, 1, 30, tzinfo=UTC)
     assert format_date_prefix(dt, "America/Los_Angeles") == "Saturday, May 10th, 2025 - "
 
 
@@ -48,19 +48,19 @@ def test_no_date_prefix():
 
 def test_parse_iso_utc():
     dt = parse_iso_utc("2025-05-11T01:30:00Z")
-    assert dt == datetime(2025, 5, 11, 1, 30, tzinfo=timezone.utc)
+    assert dt == datetime(2025, 5, 11, 1, 30, tzinfo=UTC)
 
 
 def test_format_date_prefix_fall_back_uses_pdt_not_pst():
     # 2026-11-01 07:30 UTC is 00:30 PDT (daylight time until 02:00 local / 09:00 UTC).
     # Naively assuming PST (UTC-8) would wrongly roll back to Oct 31.
-    dt = datetime(2026, 11, 1, 7, 30, tzinfo=timezone.utc)
+    dt = datetime(2026, 11, 1, 7, 30, tzinfo=UTC)
     assert format_date_prefix(dt, "America/Los_Angeles") == "Sunday, November 1st, 2026 - "
 
 
 def test_format_date_prefix_spring_forward_morning():
     # 2026-03-08 09:30 UTC is 01:30 PST, just before the 02:00->03:00 spring-forward.
-    dt = datetime(2026, 3, 8, 9, 30, tzinfo=timezone.utc)
+    dt = datetime(2026, 3, 8, 9, 30, tzinfo=UTC)
     assert format_date_prefix(dt, "America/Los_Angeles") == "Sunday, March 8th, 2026 - "
 
 
