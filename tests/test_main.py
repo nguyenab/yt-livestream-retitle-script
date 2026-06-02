@@ -115,3 +115,24 @@ def test_collect_diagnostics_gathers_both_sources(monkeypatch):
     diag = main.collect_diagnostics(object())
     assert diag["liveBroadcasts (all)"] == [("v1", "A", "2026-05-10T18:00:00Z")]
     assert diag["uploads playlist (livestreams)"] == [("v2", "B", "2026-05-11T18:00:00Z")]
+
+
+def test_extract_command_from_message():
+    upd = {"update_id": 1, "message": {"chat": {"id": 123}, "text": "/status"}}
+    assert main._extract_command(upd) == (123, "/status")
+
+
+def test_extract_command_from_edited_message():
+    upd = {"update_id": 2, "edited_message": {"chat": {"id": 123}, "text": "/run"}}
+    assert main._extract_command(upd) == (123, "/run")
+
+
+def test_extract_command_none_when_no_message():
+    # e.g. a callback_query or channel_post we don't handle
+    assert main._extract_command({"update_id": 3, "callback_query": {}}) is None
+
+
+def test_extract_command_none_when_message_has_no_text():
+    # e.g. a photo or sticker with no text
+    upd = {"update_id": 4, "message": {"chat": {"id": 123}, "photo": [{}]}}
+    assert main._extract_command(upd) is None

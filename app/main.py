@@ -86,6 +86,21 @@ def _scheduled_weekly(ctx: Context) -> None:
     _run_and_report(ctx, "Weekly run", weekly_job)
 
 
+def _extract_command(update: dict):
+    """Pull (chat_id, text) from a Telegram update, or None if it carries no text command.
+
+    Handles both message and edited_message; ignores updates with no message (callbacks,
+    channel posts) and messages with no text (photos, stickers).
+    """
+    msg = update.get("message") or update.get("edited_message")
+    if not msg:
+        return None
+    text = msg.get("text", "")
+    if not text:
+        return None
+    return msg.get("chat", {}).get("id"), text
+
+
 def collect_diagnostics(service) -> dict[str, list]:
     """Gather what each listing source returns, for the `list` diagnostic command.
 
@@ -173,13 +188,10 @@ def main() -> None:
             updates = telegram.get_updates(config.telegram_bot_token, offset=offset, timeout=30)
             for upd in updates:
                 offset = upd["update_id"] + 1
-                msg = upd.get("message") or upd.get("edited_message")
-                if not msg:
+                parsed = _extract_command(upd)
+                if parsed is None:
                     continue
-                chat_id = msg.get("chat", {}).get("id")
-                text = msg.get("text", "")
-                if text:
-                    handle_command(ctx, chat_id, text)
+                handle_command(ctx, parsed[0], parsed[1])
         except Exception:  # noqa: BLE001 - keep polling through transient errors
             log.exception("poll loop error; backing off 10s")
             time.sleep(10)
