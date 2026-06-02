@@ -19,9 +19,20 @@ class JobReport:
     dry_run: bool = False
 
 
-def run_job(service, config, statuses, window_days) -> JobReport:
-    raw = youtube.list_broadcasts(service, statuses)
-    broadcasts = [Broadcast(vid, title, start) for vid, title, start in raw]
+def _collect(sources) -> list[Broadcast]:
+    """Run each source listing thunk, union the rows, dedupe by video_id (first wins)."""
+    seen: set[str] = set()
+    broadcasts: list[Broadcast] = []
+    for source in sources:
+        for vid, title, start in source():
+            if vid in seen:
+                continue
+            seen.add(vid)
+            broadcasts.append(Broadcast(vid, title, start))
+    return broadcasts
+
+
+def _execute(service, config, broadcasts, window_days) -> JobReport:
     changes = decide(broadcasts, config.base_titles, config.timezone, window_days)
     report = JobReport(
         scanned=len(broadcasts),
@@ -46,9 +57,29 @@ def run_job(service, config, statuses, window_days) -> JobReport:
     return report
 
 
+def run_job(service, config, statuses, window_days) -> JobReport:
+    """Single-source run over liveBroadcasts.list (back-compat / diagnostic path)."""
+    broadcasts = _collect([lambda: youtube.list_broadcasts(service, statuses)])
+    return _execute(service, config, broadcasts, window_days)
+
+
 def weekly_job(service, config) -> JobReport:
-    return run_job(service, config, statuses=["all"], window_days=config.recent_window_days)
+    # liveBroadcasts catches upcoming/active streams; the uploads playlist catches
+    # recently-completed ones a persistent stream key may not surface there.
+    sources = [
+        lambda: youtube.list_broadcasts(service, ["all"]),
+        lambda: youtube.list_livestreams_via_uploads(service),
+    ]
+    broadcasts = _collect(sources)
+    return _execute(service, config, broadcasts, config.recent_window_days)
 
 
 def backdate_all(service, config) -> JobReport:
-    return run_job(service, config, statuses=["completed"], window_days=None)
+    # uploads playlist is the most reliable source for completed history; union with
+    # completed liveBroadcasts as belt-and-suspenders, deduped by video id.
+    sources = [
+        lambda: youtube.list_livestreams_via_uploads(service),
+        lambda: youtube.list_broadcasts(service, ["completed"]),
+    ]
+    broadcasts = _collect(sources)
+    return _execute(service, config, broadcasts, None)

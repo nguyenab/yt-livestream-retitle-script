@@ -61,3 +61,41 @@ def test_run_job_no_matches(monkeypatch):
     report = run_job(object(), FakeCfg([BASE]), ["all"], window_days=None)
     assert report.changed == 0
     assert report.scanned == 1
+
+
+def test_weekly_job_unions_sources_and_dedupes(monkeypatch):
+    # liveBroadcasts and uploads-playlist both report v1; v1 must be counted once.
+    monkeypatch.setattr(
+        jobs.youtube, "list_broadcasts", lambda svc, statuses: [("v1", BASE, "2026-05-10T18:00:00Z")]
+    )
+    monkeypatch.setattr(
+        jobs.youtube,
+        "list_livestreams_via_uploads",
+        lambda svc: [("v1", BASE, "2026-05-10T18:00:00Z"), ("v2", BASE, "2026-05-10T18:00:00Z")],
+    )
+    monkeypatch.setattr(jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": BASE, "categoryId": "22"})
+    applied = []
+    monkeypatch.setattr(jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append(vid))
+    # wide window so the fixed dates aren't filtered out by recency
+    report = jobs.weekly_job(object(), FakeCfg([BASE], recent_window_days=3650))
+    assert report.scanned == 2
+    assert sorted(applied) == ["v1", "v2"]
+
+
+def test_backdate_all_unions_uploads_and_completed(monkeypatch):
+    monkeypatch.setattr(
+        jobs.youtube,
+        "list_livestreams_via_uploads",
+        lambda svc: [("v1", BASE, "2024-01-07T18:00:00Z")],
+    )
+    monkeypatch.setattr(
+        jobs.youtube,
+        "list_broadcasts",
+        lambda svc, statuses: [("v1", BASE, "2024-01-07T18:00:00Z"), ("v2", BASE, "2024-01-14T18:00:00Z")],
+    )
+    monkeypatch.setattr(jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": BASE, "categoryId": "22"})
+    applied = []
+    monkeypatch.setattr(jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append(vid))
+    report = jobs.backdate_all(object(), FakeCfg([BASE]))
+    assert report.scanned == 2  # v1 deduped across the two sources
+    assert sorted(applied) == ["v1", "v2"]
