@@ -1,4 +1,4 @@
-from app.matching import normalize, matches_any
+from app.matching import matches_any, normalize
 
 BASE = "Lễ thờ phượng - Worship Service - Hội Thánh Tin Lành Ân Điển"
 

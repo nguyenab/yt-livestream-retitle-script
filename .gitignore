@@ -11,3 +11,7 @@ venv/
 
 # cloop runtime state
 .claude/cloop/*.state.json
+
+# Claude Code scheduler runtime
+.claude/scheduled_tasks.json
+.claude/scheduled_tasks.lock

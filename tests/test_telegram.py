@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from app.telegram import send_message, get_updates
+from app.telegram import get_updates, send_message
 
 
 @patch("app.telegram.requests")

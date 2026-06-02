@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.dates import format_date_prefix, has_date_prefix, parse_iso_utc
 from app.matching import matches_any
@@ -34,7 +34,7 @@ def decide(
     window_days (relative to now_utc, default current UTC time) are considered.
     """
     changes: list[Change] = []
-    ref = now_utc or datetime.now(timezone.utc)
+    ref = now_utc or datetime.now(UTC)
     for b in broadcasts:
         if has_date_prefix(b.title):
             continue
