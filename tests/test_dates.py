@@ -49,3 +49,22 @@ def test_no_date_prefix():
 def test_parse_iso_utc():
     dt = parse_iso_utc("2025-05-11T01:30:00Z")
     assert dt == datetime(2025, 5, 11, 1, 30, tzinfo=timezone.utc)
+
+
+def test_format_date_prefix_fall_back_uses_pdt_not_pst():
+    # 2026-11-01 07:30 UTC is 00:30 PDT (daylight time until 02:00 local / 09:00 UTC).
+    # Naively assuming PST (UTC-8) would wrongly roll back to Oct 31.
+    dt = datetime(2026, 11, 1, 7, 30, tzinfo=timezone.utc)
+    assert format_date_prefix(dt, "America/Los_Angeles") == "Sunday, November 1st, 2026 - "
+
+
+def test_format_date_prefix_spring_forward_morning():
+    # 2026-03-08 09:30 UTC is 01:30 PST, just before the 02:00->03:00 spring-forward.
+    dt = datetime(2026, 3, 8, 9, 30, tzinfo=timezone.utc)
+    assert format_date_prefix(dt, "America/Los_Angeles") == "Sunday, March 8th, 2026 - "
+
+
+def test_format_date_prefix_naive_datetime_treated_as_utc():
+    # A tz-naive datetime must be interpreted as UTC, then converted to Pacific.
+    naive = datetime(2026, 5, 11, 1, 30)  # == 2026-05-10 18:30 PDT
+    assert format_date_prefix(naive, "America/Los_Angeles") == "Sunday, May 10th, 2026 - "

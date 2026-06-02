@@ -128,6 +128,25 @@ def test_list_broadcasts_skips_items_without_start():
     assert list_broadcasts(service, ["all"]) == []
 
 
+def test_list_broadcasts_dedupes_same_id_across_statuses():
+    # A broadcast can appear under more than one requested status; it must be returned once.
+    pages = [
+        {"items": [{"id": "v1", "snippet": {"title": "A", "actualStartTime": "2026-05-10T18:00:00Z"}}]},
+        {
+            "items": [
+                {"id": "v1", "snippet": {"title": "A", "actualStartTime": "2026-05-10T18:00:00Z"}},
+                {"id": "v2", "snippet": {"title": "B", "actualStartTime": "2026-05-17T18:00:00Z"}},
+            ]
+        },
+    ]
+    service = _make_service(pages)
+    result = list_broadcasts(service, ["active", "completed"])
+    assert result == [
+        ("v1", "A", "2026-05-10T18:00:00Z"),
+        ("v2", "B", "2026-05-17T18:00:00Z"),
+    ]
+
+
 def test_get_video_snippet_returns_snippet():
     service = MagicMock()
     service.videos.return_value.list.return_value.execute.return_value = {
