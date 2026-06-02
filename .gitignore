@@ -1,0 +1,10 @@
+.env
+token.json
+*.token
+state.json
+logs/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
