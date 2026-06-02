@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import logging
+
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
+log = logging.getLogger(__name__)
+
+SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
+TOKEN_URI = "https://oauth2.googleapis.com/token"
+_NUM_RETRIES = 3  # googleapiclient applies exponential backoff for 5xx/429
+
+
+def build_service(client_id: str, client_secret: str, refresh_token: str):
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        client_id=client_id,
+        client_secret=client_secret,
+        token_uri=TOKEN_URI,
+        scopes=SCOPES,
+    )
+    return build("youtube", "v3", credentials=creds, cache_discovery=False)
+
+
+def list_broadcasts(service, statuses):
+    """Return [(video_id, title, start_iso)] for the given broadcastStatus values.
+
+    statuses: iterable from {'all','active','upcoming','completed'}.
+    Uses liveBroadcasts.list, which returns only livestreams (never plain uploads).
+    start_iso prefers actualStartTime, falling back to scheduledStartTime; items
+    with neither are skipped.
+    """
+    results = []
+    seen = set()
+    for status in statuses:
+        page_token = None
+        while True:
+            resp = (
+                service.liveBroadcasts()
+                .list(
+                    part="snippet,status",
+                    broadcastStatus=status,
+                    broadcastType="all",
+                    maxResults=50,
+                    pageToken=page_token,
+                )
+                .execute(num_retries=_NUM_RETRIES)
+            )
+            for item in resp.get("items", []):
+                vid = item["id"]
+                if vid in seen:
+                    continue
+                snip = item.get("snippet", {})
+                start = snip.get("actualStartTime") or snip.get("scheduledStartTime")
+                if not start:
+                    continue
+                seen.add(vid)
+                results.append((vid, snip.get("title", ""), start))
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+    return results
+
+
+def get_video_snippet(service, video_id: str):
+    resp = (
+        service.videos()
+        .list(part="snippet", id=video_id)
+        .execute(num_retries=_NUM_RETRIES)
+    )
+    items = resp.get("items", [])
+    return items[0]["snippet"] if items else None
+
+
+def update_title(service, video_id: str, snippet: dict, new_title: str):
+    new_snippet = dict(snippet)
+    new_snippet["title"] = new_title
+    body = {"id": video_id, "snippet": new_snippet}
+    return (
+        service.videos()
+        .update(part="snippet", body=body)
+        .execute(num_retries=_NUM_RETRIES)
+    )
