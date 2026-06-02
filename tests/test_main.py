@@ -136,3 +136,24 @@ def test_extract_command_none_when_message_has_no_text():
     # e.g. a photo or sticker with no text
     upd = {"update_id": 4, "message": {"chat": {"id": 123}, "photo": [{}]}}
     assert main._extract_command(upd) is None
+
+
+class _FakeResp:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+def test_is_conflict_true_for_409():
+    exc = RuntimeError("conflict")
+    exc.response = _FakeResp(409)
+    assert main._is_conflict(exc) is True
+
+
+def test_is_conflict_false_for_other_status():
+    exc = RuntimeError("server error")
+    exc.response = _FakeResp(500)
+    assert main._is_conflict(exc) is False
+
+
+def test_is_conflict_false_when_no_response():
+    assert main._is_conflict(RuntimeError("network")) is False

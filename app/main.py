@@ -101,6 +101,12 @@ def _extract_command(update: dict):
     return msg.get("chat", {}).get("id"), text
 
 
+def _is_conflict(exc) -> bool:
+    """True if exc is a Telegram getUpdates 409 Conflict (another poller on this token)."""
+    resp = getattr(exc, "response", None)
+    return getattr(resp, "status_code", None) == 409
+
+
 def collect_diagnostics(service) -> dict[str, list]:
     """Gather what each listing source returns, for the `list` diagnostic command.
 
@@ -182,19 +188,31 @@ def main() -> None:
          + (" (DRY_RUN)" if config.dry_run else ""))
 
     offset = _drain_pending_updates(config.telegram_bot_token)
+    conflict_alerted = False
     log.info("entering Telegram poll loop")
     while True:
         try:
             updates = telegram.get_updates(config.telegram_bot_token, offset=offset, timeout=30)
+            conflict_alerted = False  # cleared once polling succeeds again
             for upd in updates:
                 offset = upd["update_id"] + 1
                 parsed = _extract_command(upd)
                 if parsed is None:
                     continue
                 handle_command(ctx, parsed[0], parsed[1])
-        except Exception:  # noqa: BLE001 - keep polling through transient errors
-            log.exception("poll loop error; backing off 10s")
-            time.sleep(10)
+        except Exception as e:  # noqa: BLE001 - keep polling through transient errors
+            if _is_conflict(e):
+                log.error("Telegram getUpdates 409 Conflict — another instance is polling this token")
+                if not conflict_alerted:
+                    send(
+                        "⚠ Telegram conflict (409): another process is polling this bot token. "
+                        "Only one yt-retitle instance may run — stop the duplicate."
+                    )
+                    conflict_alerted = True
+                time.sleep(30)
+            else:
+                log.exception("poll loop error; backing off 10s")
+                time.sleep(10)
 
 
 if __name__ == "__main__":
