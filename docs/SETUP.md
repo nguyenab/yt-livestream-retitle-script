@@ -47,7 +47,23 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 cp .env.example .env && nano .env          # fill in all values; keep DRY_RUN=true first
 ```
 
-### Preview before writing anything
+### Step 1 (gating): confirm your livestreams are visible
+
+The service finds streams via the YouTube `liveBroadcasts.list` API. Before trusting it,
+verify your real (Streamlabs-created) streams actually show up — this makes no changes:
+
+```bash
+.venv/bin/python -m app.main list
+```
+
+You should see your past worship-service streams listed under `broadcastStatus=completed`
+(date, video id, title). **If the list is empty or missing streams,** your channel's
+livestreams aren't surfacing through this endpoint (can happen with a legacy persistent
+stream key). Stop and report it — the listing strategy then needs the uploads-playlist +
+`liveStreamingDetails` fallback rather than `liveBroadcasts.list`. Do not proceed until
+`list` shows your streams, or the jobs will silently do nothing (you'd see `Scanned: 0`).
+
+### Step 2: preview before writing anything
 
 ```bash
 .venv/bin/python -m app.main backdate       # DRY_RUN=true → logs what it WOULD change

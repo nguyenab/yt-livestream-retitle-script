@@ -86,6 +86,24 @@ def _scheduled_weekly(ctx: Context) -> None:
     _run_and_report(ctx, "Weekly run", weekly_job)
 
 
+def _drain_pending_updates(token: str) -> int | None:
+    """Consume updates queued while the daemon was down so old commands don't replay.
+
+    Without this, a /backdate sent (or left unread) while the service was offline would
+    auto-fire on the next startup. Returns the offset to resume from (last update_id + 1),
+    or None if nothing was pending.
+    """
+    try:
+        updates = telegram.get_updates(token, offset=None, timeout=0)
+    except Exception:  # noqa: BLE001 - draining is best-effort
+        log.exception("failed to drain pending updates at startup")
+        return None
+    if not updates:
+        return None
+    log.info("dropped %d pending Telegram update(s) at startup", len(updates))
+    return updates[-1]["update_id"] + 1
+
+
 def main() -> None:
     config = load_config()
     logging.basicConfig(
@@ -136,7 +154,7 @@ def main() -> None:
     send(f"✅ yt-retitle started. Next weekly run: {next_run()}"
          + (" (DRY_RUN)" if config.dry_run else ""))
 
-    offset = None
+    offset = _drain_pending_updates(config.telegram_bot_token)
     log.info("entering Telegram poll loop")
     while True:
         try:
@@ -162,20 +180,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["serve", "backdate", "weekly"],
+        choices=["serve", "backdate", "weekly", "list"],
         default="serve",
-        help="serve (default daemon), backdate (one-shot), weekly (one-shot)",
+        help="serve (default daemon), backdate (one-shot), weekly (one-shot), "
+        "list (diagnostic: print livestreams the API returns, no changes)",
     )
     args = parser.parse_args()
 
     if args.command == "serve":
         main()
+        sys.exit(0)
+
+    cfg = load_config()
+    logging.basicConfig(level=getattr(logging, cfg.log_level, logging.INFO), stream=sys.stdout)
+    svc = youtube.build_service(
+        cfg.youtube_client_id, cfg.youtube_client_secret, cfg.youtube_refresh_token
+    )
+
+    if args.command == "list":
+        # Diagnostic: confirm the channel's livestreams (incl. Streamlabs-created ones)
+        # actually surface via liveBroadcasts.list before trusting backdate/weekly.
+        for statuses in (["all"], ["completed"]):
+            rows = youtube.list_broadcasts(svc, statuses)
+            print(f"\n=== broadcastStatus={statuses[0]} — {len(rows)} broadcast(s) ===")
+            for vid, title, start in rows:
+                print(f"{start}  {vid}  {title}")
     else:
-        cfg = load_config()
-        logging.basicConfig(level=getattr(logging, cfg.log_level, logging.INFO), stream=sys.stdout)
-        svc = youtube.build_service(
-            cfg.youtube_client_id, cfg.youtube_client_secret, cfg.youtube_refresh_token
-        )
         fn = backdate_all if args.command == "backdate" else weekly_job
         rep = fn(svc, cfg)
         print(format_report(args.command, rep))

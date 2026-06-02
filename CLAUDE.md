@@ -40,6 +40,7 @@ sudo systemctl restart yt-retitle
 | Daemon | `python -m app.main serve` (systemd runs this) |
 | One-shot backdate | `python -m app.main backdate` |
 | One-shot weekly | `python -m app.main weekly` |
+| Diagnostic list | `python -m app.main list` (print livestreams the API returns; no changes) |
 | Tests | `python -m pytest` |
 | Telegram | `/status`, `/run`, `/backdate`, `/help` |
 

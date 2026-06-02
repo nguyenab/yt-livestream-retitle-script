@@ -77,3 +77,27 @@ class _Report:
     dry_run = False
     changes = []
     failures = []
+
+
+def test_drain_pending_updates_returns_next_offset(monkeypatch):
+    monkeypatch.setattr(
+        main.telegram,
+        "get_updates",
+        lambda token, offset=None, timeout=0: [{"update_id": 10}, {"update_id": 11}],
+    )
+    assert main._drain_pending_updates("T") == 12
+
+
+def test_drain_pending_updates_none_when_empty(monkeypatch):
+    monkeypatch.setattr(
+        main.telegram, "get_updates", lambda token, offset=None, timeout=0: []
+    )
+    assert main._drain_pending_updates("T") is None
+
+
+def test_drain_pending_updates_swallows_errors(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("network")
+
+    monkeypatch.setattr(main.telegram, "get_updates", boom)
+    assert main._drain_pending_updates("T") is None
