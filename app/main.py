@@ -86,6 +86,18 @@ def _scheduled_weekly(ctx: Context) -> None:
     _run_and_report(ctx, "Weekly run", weekly_job)
 
 
+def collect_diagnostics(service) -> dict[str, list]:
+    """Gather what each listing source returns, for the `list` diagnostic command.
+
+    Lets you confirm whether the uploads-playlist source catches streams that
+    liveBroadcasts.list misses, before trusting the jobs against the real channel.
+    """
+    return {
+        "liveBroadcasts (all)": youtube.list_broadcasts(service, ["all"]),
+        "uploads playlist (livestreams)": youtube.list_livestreams_via_uploads(service),
+    }
+
+
 def _drain_pending_updates(token: str) -> int | None:
     """Consume updates queued while the daemon was down so old commands don't replay.
 
@@ -199,10 +211,10 @@ if __name__ == "__main__":
 
     if args.command == "list":
         # Diagnostic: confirm the channel's livestreams (incl. Streamlabs-created ones)
-        # actually surface via liveBroadcasts.list before trusting backdate/weekly.
-        for statuses in (["all"], ["completed"]):
-            rows = youtube.list_broadcasts(svc, statuses)
-            print(f"\n=== broadcastStatus={statuses[0]} — {len(rows)} broadcast(s) ===")
+        # surface via each source before trusting backdate/weekly. Compare the two:
+        # if uploads shows streams liveBroadcasts misses, the jobs now still catch them.
+        for label, rows in collect_diagnostics(svc).items():
+            print(f"\n=== {label} — {len(rows)} ===")
             for vid, title, start in rows:
                 print(f"{start}  {vid}  {title}")
     else:

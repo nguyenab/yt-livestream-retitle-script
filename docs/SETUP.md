@@ -56,12 +56,16 @@ verify your real (Streamlabs-created) streams actually show up — this makes no
 .venv/bin/python -m app.main list
 ```
 
-You should see your past worship-service streams listed under `broadcastStatus=completed`
-(date, video id, title). **If the list is empty or missing streams,** your channel's
-livestreams aren't surfacing through this endpoint (can happen with a legacy persistent
-stream key). Stop and report it — the listing strategy then needs the uploads-playlist +
-`liveStreamingDetails` fallback rather than `liveBroadcasts.list`. Do not proceed until
-`list` shows your streams, or the jobs will silently do nothing (you'd see `Scanned: 0`).
+This prints two sources side by side: **`liveBroadcasts (all)`** and **`uploads playlist
+(livestreams)`** (each line: date, video id, title). You should see your past worship-service
+streams in at least one. The jobs read **both** sources and dedupe, so a stream that appears
+in either is covered:
+
+- If both lists show your streams — great, you're fully covered.
+- If `liveBroadcasts` is empty but `uploads playlist` shows them — expected with a legacy
+  persistent stream key; the jobs still catch them via the uploads source.
+- **If both are empty or missing streams** — stop and report it; neither API path sees your
+  streams and the jobs would do nothing (`Scanned: 0`).
 
 ### Step 2: preview before writing anything
 
