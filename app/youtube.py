@@ -64,6 +64,63 @@ def list_broadcasts(service, statuses):
     return results
 
 
+def list_livestreams_via_uploads(service):
+    """Return [(video_id, title, start_iso)] for the channel's livestreams, sourced from
+    the uploads playlist and filtered to videos that carry liveStreamingDetails.
+
+    This is a more reliable fallback than liveBroadcasts.list for completed history: it
+    catches streams produced by an external encoder / persistent stream key that may never
+    appear under liveBroadcasts. It stays livestreams-only by keeping a video only if it has
+    a liveStreamingDetails block (plain uploads have none). start_iso prefers
+    actualStartTime, falling back to scheduledStartTime; items with neither are skipped.
+
+    Quota: channels.list (~1) + playlistItems.list (~1/page) + videos.list (~1/50 ids).
+    """
+    channel = (
+        service.channels()
+        .list(part="contentDetails", mine=True)
+        .execute(num_retries=_NUM_RETRIES)
+    )
+    items = channel.get("items", [])
+    if not items:
+        return []
+    uploads_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+    video_ids = []
+    page_token = None
+    while True:
+        resp = (
+            service.playlistItems()
+            .list(part="contentDetails", playlistId=uploads_id, maxResults=50, pageToken=page_token)
+            .execute(num_retries=_NUM_RETRIES)
+        )
+        for item in resp.get("items", []):
+            vid = item.get("contentDetails", {}).get("videoId")
+            if vid:
+                video_ids.append(vid)
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+
+    results = []
+    for start in range(0, len(video_ids), 50):
+        batch = video_ids[start : start + 50]
+        resp = (
+            service.videos()
+            .list(part="snippet,liveStreamingDetails", id=",".join(batch))
+            .execute(num_retries=_NUM_RETRIES)
+        )
+        for video in resp.get("items", []):
+            lsd = video.get("liveStreamingDetails")
+            if not lsd:
+                continue  # plain upload, not a livestream
+            start_iso = lsd.get("actualStartTime") or lsd.get("scheduledStartTime")
+            if not start_iso:
+                continue
+            results.append((video["id"], video.get("snippet", {}).get("title", ""), start_iso))
+    return results
+
+
 def get_video_snippet(service, video_id: str):
     resp = (
         service.videos()
