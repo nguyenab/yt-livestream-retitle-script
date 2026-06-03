@@ -5,10 +5,24 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Run as an unprivileged user, never root. Change if your user differs.
+User=banhmisaigon
 WorkingDirectory=/opt/yt-retitle
 ExecStart=/opt/yt-retitle/.venv/bin/python -m app.main serve
 Restart=always
 RestartSec=10
+
+# --- Hardening ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# The app writes state.json (and LOG_FILE, if set) inside its working dir.
+ReadWritePaths=/opt/yt-retitle
+
 StandardOutput=journal
 StandardError=journal
 

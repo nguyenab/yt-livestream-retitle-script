@@ -40,12 +40,27 @@ Copy that value.
 
 ## 4. VPS install
 
+Run the service as an **unprivileged user, never root** — it holds your YouTube and Telegram
+tokens, so you want the blast radius contained. These steps use the existing user
+`banhmisaigon`; substitute your own (and update `User=` in the unit file to match).
+
 ```bash
-sudo mkdir -p /opt/yt-retitle && sudo chown $USER /opt/yt-retitle
-git clone <your-repo> /opt/yt-retitle && cd /opt/yt-retitle
-python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-cp .env.example .env && nano .env          # fill in all values; keep DRY_RUN=true first
+# Code lives in /opt, owned by the service user
+sudo install -d -o banhmisaigon -g banhmisaigon /opt/yt-retitle
+sudo -u banhmisaigon git clone https://github.com/nguyenab/yt-livestream-retitle-script.git /opt/yt-retitle
+cd /opt/yt-retitle
+sudo -u banhmisaigon python3 -m venv .venv
+sudo -u banhmisaigon .venv/bin/pip install -r requirements.txt
+
+# Secrets: readable only by the service user
+sudo -u banhmisaigon cp .env.example .env
+sudo -u banhmisaigon nano .env             # fill in all values; keep DRY_RUN=true first
+sudo chmod 600 /opt/yt-retitle/.env
 ```
+
+> Clone over **https** (not the `git@github.com:` SSH URL) — the VPS user needs no GitHub key
+> for read-only access. Run the `python -m app.main …` commands below as that user too, e.g.
+> `sudo -u banhmisaigon .venv/bin/python -m app.main list`.
 
 ### Step 1 (gating): confirm your livestreams are visible
 
@@ -80,6 +95,10 @@ When the preview looks right, set `DRY_RUN=false` in `.env` and run the real bac
 ```
 
 ### Install the service (weekly automation + Telegram control)
+
+The unit runs as `User=banhmisaigon` with systemd hardening (`ProtectSystem=strict`,
+`ProtectHome`, `NoNewPrivileges`, etc.) and grants write access only to `/opt/yt-retitle`
+(for `state.json`). Confirm the `User=` line matches your user before installing.
 
 ```bash
 sudo cp deploy/yt-retitle.service /etc/systemd/system/
