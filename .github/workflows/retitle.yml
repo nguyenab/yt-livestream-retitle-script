@@ -1,0 +1,64 @@
+name: Retitle livestreams
+
+on:
+  schedule:
+    # Mondays 02:00 UTC ≈ Sunday 6 PM PST / 7 PM PDT (GitHub cron is UTC and only
+    # runs in winter/summer offsets). The job is idempotent and scans a 7-day
+    # window, so a delayed or slightly-off run still catches the Sunday stream.
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Which job to run"
+        type: choice
+        default: weekly
+        options:
+          - weekly
+          - backdate
+      dry_run:
+        description: "Preview only — log changes without editing titles"
+        type: boolean
+        default: false
+
+# Don't let a manual run collide with the scheduled one.
+concurrency:
+  group: retitle
+  cancel-in-progress: false
+
+jobs:
+  retitle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Run ${{ inputs.command || 'weekly' }}
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BASE_TITLES: ${{ secrets.BASE_TITLES }}
+          TIMEZONE: America/Los_Angeles
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        # The CLI prints the report and sends it to Telegram as the "done" message.
+        run: python -m app.main ${{ inputs.command || 'weekly' }}
+
+      - name: Notify Telegram on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -fsS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=⚠ yt-retitle Action failed (run ${{ github.run_id }}). Check the Actions log — often an expired YouTube refresh token." \
+            >/dev/null
