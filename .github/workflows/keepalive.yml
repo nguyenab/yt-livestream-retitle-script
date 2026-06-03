@@ -1,0 +1,25 @@
+name: Keepalive
+
+# GitHub auto-disables scheduled workflows after 60 days of no repository
+# activity. This makes a tiny empty commit once a month so the weekly retitle
+# schedule never gets paused. (Scheduled runs alone don't count as activity.)
+
+on:
+  schedule:
+    - cron: "37 8 1 * *" # 1st of each month, 08:37 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Empty commit to keep schedules active
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keepalive (keep scheduled workflows active)"
+          git push

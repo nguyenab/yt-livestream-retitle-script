@@ -1,5 +1,5 @@
 from app.jobs import JobReport
-from app.notify import format_report, format_status
+from app.notify import format_report
 
 
 def test_format_report_summary_and_changes():
@@ -18,15 +18,3 @@ def test_format_report_marks_dry_run_and_failures():
     text = format_report("Backdate", r)
     assert "DRY_RUN" in text
     assert "v9: boom" in text
-
-
-def test_format_status_includes_fields():
-    state = {
-        "last_run_at": "2026-05-10T18:00:05Z",
-        "last_result": "changed 1, failures 0",
-        "last_error": None,
-    }
-    text = format_status(state, next_run="2026-05-17 18:00 PDT", started_at="2026-05-10T00:00:00Z")
-    assert "2026-05-10T18:00:05Z" in text
-    assert "2026-05-17 18:00 PDT" in text
-    assert "changed 1" in text

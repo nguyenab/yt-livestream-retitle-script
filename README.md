@@ -1,53 +1,51 @@
 # yt-livestream-retitle-script
 
 Prepends each YouTube **livestream's** own broadcast date (Pacific time) to its title — once
-for the whole backlog, then automatically every Sunday 18:00 Pacific. Built for a channel whose
-streams are pushed by Streamlabs with a fixed title and no date token.
+for the whole backlog, then automatically every week. Built for a channel whose streams are
+pushed by Streamlabs with a fixed title and no date token.
 
 ```
 Lễ thờ phượng - Worship Service …   →   Sunday, May 10th, 2026 - Lễ thờ phượng - Worship Service …
 ```
 
-Controlled and monitored entirely through an existing Telegram bot. Only livestreams are ever
-touched — never plain uploads.
+Runs entirely on **GitHub Actions** — no server to maintain — and posts a report to Telegram
+after each run. Only livestreams are ever touched, never plain uploads.
 
 ## Features
 
 - **One-time backdate** of every past livestream, each with its own broadcast date.
-- **Weekly auto-retitle** (Sun 18:00 `America/Los_Angeles`, auto PST/PDT), self-healing over a
-  configurable recent window.
-- **Telegram control:** `/status`, `/run`, `/backdate`, `/help`; startup ping with the next run.
+- **Weekly auto-retitle** (Mondays 02:00 UTC ≈ Sunday evening `America/Los_Angeles`),
+  self-healing over a configurable recent window.
+- **Telegram report** after every run, plus a failure alert if something breaks.
 - **Livestreams-only** via `liveBroadcasts.list` **and** an uploads-playlist +
   `liveStreamingDetails` fallback (deduped), so streams a persistent stream key hides from
   `liveBroadcasts` are still caught.
 - **Robust:** UTC→Pacific date conversion, idempotent (never double-prefixes), per-video error
-  isolation, API retry/backoff, `DRY_RUN` preview, 409-conflict alerting, and a resident daemon
-  that survives transient failures.
+  isolation, API retry/backoff, and a `dry_run` preview mode.
 
-## Quickstart
+## Deployment
 
-Full instructions — Google Cloud OAuth (publish the consent screen to **Production** or tokens
-expire in 7 days), the refresh-token bootstrap, Telegram wiring, and VPS/systemd install — are
-in **[docs/SETUP.md](docs/SETUP.md)**.
+Set six repo secrets and the scheduled workflow does the rest — full walkthrough (Google Cloud
+OAuth → **publish the consent screen to Production** or tokens expire in 7 days, the
+refresh-token bootstrap, Telegram, and the secrets) is in **[docs/SETUP.md](docs/SETUP.md)**.
 
-```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-cp .env.example .env && nano .env          # fill values; keep DRY_RUN=true first
-python -m app.main list                    # verify your streams are visible (no changes)
-python -m app.main backdate                # DRY_RUN=true → preview; flip to false for real
-```
+- `.github/workflows/retitle.yml` — weekly schedule + manual **Run workflow** (choose
+  `weekly`/`backdate`, toggle `dry_run`).
+- `.github/workflows/keepalive.yml` — monthly no-op commit so GitHub doesn't auto-pause the
+  schedule after 60 days of inactivity.
 
-## Commands
+## Commands (CLI — the workflow calls these; also runnable locally)
 
 | Command | What it does |
 |---|---|
-| `python -m app.main serve` | Run the daemon (scheduler + Telegram loop); systemd runs this |
 | `python -m app.main backdate` | Retitle all past livestreams (idempotent) |
-| `python -m app.main weekly` | Run the weekly job once |
+| `python -m app.main weekly` | Run the weekly job once (recent window) |
 | `python -m app.main list` | Diagnostic: print livestreams each source returns; no changes |
 | `python -m pytest` | Run the test suite |
+| `make lint` | Lint with ruff |
 
-Telegram: `/status`, `/run`, `/backdate`, `/help`.
+Each `backdate`/`weekly` run prints its report and sends it to Telegram. For local runs, copy
+`.env.example` to `.env` and fill it in.
 
 ## How it works
 
@@ -62,7 +60,6 @@ The weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans full history.
 
 ## Configuration & architecture
 
-`.env` reference and VPS update steps live in **[CLAUDE.md](CLAUDE.md)**. Pure logic (`dates`,
-`matching`, `retitle`, `notify`) is network-free and unit-tested; `youtube`/`telegram` are thin
-wrappers; `jobs` orchestrates and `main` runs the scheduler + Telegram loop. Design docs are in
-`docs/superpowers/`.
+Secrets reference lives in **[CLAUDE.md](CLAUDE.md)**. Pure logic (`dates`, `matching`,
+`retitle`, `notify`) is network-free and unit-tested; `youtube`/`telegram` are thin wrappers;
+`jobs` orchestrates and `main` is the CLI entrypoint. Design docs are in `docs/superpowers/`.

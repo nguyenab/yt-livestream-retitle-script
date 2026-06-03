@@ -61,7 +61,7 @@ A browser tab opens:
 YOUTUBE_REFRESH_TOKEN=1//0g...
 ```
 
-Copy that whole value into `.env` as `YOUTUBE_REFRESH_TOKEN` (along with the client id/secret).
+Save that whole value — it becomes the **`YOUTUBE_REFRESH_TOKEN`** GitHub secret in step 4.
 
 > Token didn't print? Re-run — `get_token.py` forces `prompt=consent` + offline access, which is
 > required to receive a refresh token. If it still fails, you likely authorized a Google account
@@ -69,88 +69,58 @@ Copy that whole value into `.env` as `YOUTUBE_REFRESH_TOKEN` (along with the cli
 
 ## 3. Telegram
 
-- Your bot token comes from @BotFather (you already have a bot).
-- Get your chat ID: message the bot, then open
+- Your **bot token** comes from @BotFather → `/mybots` → your bot → API Token.
+- Your **chat ID**: message the bot once, then open
   `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `message.chat.id`.
-- Put both in `.env` as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+- These become the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` GitHub secrets in step 4.
 
-## 4. VPS install
+## 4. Deploy on GitHub Actions
 
-Run the service as an **unprivileged user, never root** — it holds your YouTube and Telegram
-tokens, so you want the blast radius contained. These steps use the existing user
-`banhmisaigon`; substitute your own (and update `User=` in the unit file to match).
+The service runs entirely on GitHub Actions — no server. Add your credentials as repo secrets
+and the scheduled workflow does the rest.
 
-```bash
-# Code lives in /opt, owned by the service user
-sudo install -d -o banhmisaigon -g banhmisaigon /opt/yt-retitle
-sudo -u banhmisaigon git clone https://github.com/nguyenab/yt-livestream-retitle-script.git /opt/yt-retitle
-cd /opt/yt-retitle
-sudo -u banhmisaigon python3 -m venv .venv
-sudo -u banhmisaigon .venv/bin/pip install -r requirements.txt
+### Set the secrets
 
-# Secrets: readable only by the service user
-sudo -u banhmisaigon cp .env.example .env
-sudo -u banhmisaigon nano .env             # fill in all values; keep DRY_RUN=true first
-sudo chmod 600 /opt/yt-retitle/.env
-```
+Repo → **Settings → Secrets and variables → Actions → New repository secret**. Add all six:
 
-> Clone over **https** (not the `git@github.com:` SSH URL) — the VPS user needs no GitHub key
-> for read-only access. Run the `python -m app.main …` commands below as that user too, e.g.
-> `sudo -u banhmisaigon .venv/bin/python -m app.main list`.
+| Secret | Value |
+|---|---|
+| `YOUTUBE_CLIENT_ID` | from step 1d |
+| `YOUTUBE_CLIENT_SECRET` | from step 1d |
+| `YOUTUBE_REFRESH_TOKEN` | from step 2 |
+| `TELEGRAM_BOT_TOKEN` | from step 3 |
+| `TELEGRAM_CHAT_ID` | from step 3 |
+| `BASE_TITLES` | the title(s) to match, `||`-separated |
 
-### Step 1 (gating): confirm your livestreams are visible
+(`TIMEZONE` is hardcoded to `America/Los_Angeles` in the workflow.) From a machine where the
+`gh` CLI is logged in you can instead run `gh secret set NAME --repo <owner>/<repo>` per secret.
 
-The service finds streams via the YouTube `liveBroadcasts.list` API. Before trusting it,
-verify your real (Streamlabs-created) streams actually show up — this makes no changes:
+### Verify, then run
 
-```bash
-.venv/bin/python -m app.main list
-```
+The **Actions** tab → **Retitle livestreams** → **Run workflow** lets you trigger runs manually
+with a `command` (weekly / backdate) and a `dry_run` toggle:
 
-This prints two sources side by side: **`liveBroadcasts (all)`** and **`uploads playlist
-(livestreams)`** (each line: date, video id, title). You should see your past worship-service
-streams in at least one. The jobs read **both** sources and dedupe, so a stream that appears
-in either is covered:
+1. **`list`-style check first:** run **backdate** with **dry_run ✓**. It makes no changes and
+   Telegrams you a preview of exactly what it would retitle. Confirm your streams appear with the
+   right dates. (If the report shows `Scanned: 0`, neither API source saw your streams — stop and
+   investigate before going further.)
+2. **Real backfill:** run **backdate** with **dry_run off** — applies the dates to your whole
+   history once.
+3. After that, the **weekly schedule** (`cron: "0 2 * * 1"`, Mondays 02:00 UTC ≈ Sunday evening
+   Pacific) runs automatically forever.
 
-- If both lists show your streams — great, you're fully covered.
-- If `liveBroadcasts` is empty but `uploads playlist` shows them — expected with a legacy
-  persistent stream key; the jobs still catch them via the uploads source.
-- **If both are empty or missing streams** — stop and report it; neither API path sees your
-  streams and the jobs would do nothing (`Scanned: 0`).
+## 5. How you'll know it ran
 
-### Step 2: preview before writing anything
+- **Telegram** — every run posts a report (scanned / changed, and the new titles).
+- **Actions tab** — weekly runs appear labeled trigger `schedule`; green check = success.
+- **Failures** (e.g. an expired token) send a Telegram alert instead of failing silently.
 
-```bash
-.venv/bin/python -m app.main backdate       # DRY_RUN=true → logs what it WOULD change
-```
+> GitHub auto-pauses scheduled workflows after **60 days of no repo activity** and emails you to
+> re-enable. The included `keepalive.yml` workflow makes a tiny monthly commit to prevent that,
+> so it stays set-and-forget.
 
-When the preview looks right, set `DRY_RUN=false` in `.env` and run the real backdate:
+### Local testing (optional)
 
-```bash
-.venv/bin/python -m app.main backdate
-```
-
-### Install the service (weekly automation + Telegram control)
-
-The unit runs as `User=banhmisaigon` with systemd hardening (`ProtectSystem=strict`,
-`ProtectHome`, `NoNewPrivileges`, etc.) and grants write access only to `/opt/yt-retitle`
-(for `state.json`). Confirm the `User=` line matches your user before installing.
-
-```bash
-sudo cp deploy/yt-retitle.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now yt-retitle
-sudo systemctl status yt-retitle
-journalctl -u yt-retitle -f
-```
-
-## 5. Health check
-
-In Telegram, send the bot:
-
-- `/status` — last run, next run, last error
-- `/run` — run the weekly job now
-- `/backdate` — retitle all past livestreams
-- `/help`
-
-On startup the service messages you `✅ yt-retitle started. Next weekly run: …`.
+To run the CLI on your own machine, create a `.env` from `.env.example`, fill it in, and run
+`python -m app.main list` / `backdate` / `weekly`. Useful for debugging; not required for the
+Actions deployment.

@@ -28,16 +28,8 @@ def test_load_config_defaults(monkeypatch):
     _set(monkeypatch)
     cfg = load_config()
     assert cfg.timezone == "America/Los_Angeles"
-    assert cfg.schedule_day == "sun"
-    assert cfg.schedule_hour == 18
     assert cfg.recent_window_days == 7
     assert cfg.dry_run is False
-    assert cfg.log_file == ""
-
-
-def test_load_config_reads_log_file(monkeypatch):
-    _set(monkeypatch, LOG_FILE="/var/log/yt-retitle/app.log")
-    assert load_config().log_file == "/var/log/yt-retitle/app.log"
 
 
 def test_load_config_dry_run_true(monkeypatch):

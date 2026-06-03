@@ -15,12 +15,9 @@ class Config:
     telegram_chat_id: str
     base_titles: list[str]
     timezone: str
-    schedule_day: str
-    schedule_hour: int
     recent_window_days: int
     dry_run: bool
     log_level: str
-    log_file: str
 
 
 def _require(name: str) -> str:
@@ -41,10 +38,7 @@ def load_config() -> Config:
         telegram_chat_id=_require("TELEGRAM_CHAT_ID"),
         base_titles=[t.strip() for t in base.split("||") if t.strip()],
         timezone=os.getenv("TIMEZONE", "America/Los_Angeles").strip(),
-        schedule_day=os.getenv("SCHEDULE_DAY", "sun").strip(),
-        schedule_hour=int(os.getenv("SCHEDULE_HOUR", "18")),
         recent_window_days=int(os.getenv("RECENT_WINDOW_DAYS", "7")),
         dry_run=os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes"),
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
-        log_file=os.getenv("LOG_FILE", "").strip(),
     )

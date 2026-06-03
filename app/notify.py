@@ -23,16 +23,3 @@ def format_report(title: str, report: JobReport) -> str:
         lines.append(f"Failures ({len(report.failures)}):")
         lines.extend(f"⚠ {f}" for f in report.failures[:10])
     return "\n".join(lines)
-
-
-def format_status(state: dict, next_run: str, started_at: str) -> str:
-    return "\n".join(
-        [
-            "Status: running",
-            f"Started: {started_at}",
-            f"Next run: {next_run}",
-            f"Last run: {state.get('last_run_at', 'never')}",
-            f"Last result: {state.get('last_result', 'n/a')}",
-            f"Last error: {state.get('last_error') or 'none'}",
-        ]
-    )
