@@ -15,8 +15,7 @@ class JobReport:
     changed: int = 0
     skipped: int = 0
     failures: list[str] = field(default_factory=list)
-    # (video_id, new_title, replaced) — replaced=True means the title was overwritten
-    changes: list[tuple[str, str, bool]] = field(default_factory=list)
+    changes: list[tuple[str, str]] = field(default_factory=list)  # (video_id, new_title)
     dry_run: bool = False
 
 
@@ -33,14 +32,26 @@ def _collect(sources) -> list[Broadcast]:
     return broadcasts
 
 
-def _execute(service, config, broadcasts, window_days, canonical=None, force_ids=None) -> JobReport:
+def _with_durations(service, broadcasts: list[Broadcast]) -> list[Broadcast]:
+    """Backfill each broadcast's video length via a single batched videos.list call."""
+    if not broadcasts:
+        return broadcasts
+    durations = youtube.fetch_durations(service, [b.video_id for b in broadcasts])
+    return [
+        Broadcast(b.video_id, b.title, b.start_iso, durations.get(b.video_id))
+        for b in broadcasts
+    ]
+
+
+def _execute(service, config, broadcasts, window_days, min_worship_seconds=None) -> JobReport:
+    if min_worship_seconds is not None:
+        broadcasts = _with_durations(service, broadcasts)
     changes = decide(
         broadcasts,
         config.base_titles,
         config.timezone,
         window_days,
-        canonical=canonical,
-        force_ids=force_ids,
+        min_worship_seconds=min_worship_seconds,
     )
     report = JobReport(
         scanned=len(broadcasts),
@@ -58,7 +69,7 @@ def _execute(service, config, broadcasts, window_days, canonical=None, force_ids
                 youtube.update_title(service, ch.video_id, snippet, ch.new_title)
                 log.info("retitled %s -> %s", ch.video_id, ch.new_title)
             report.changed += 1
-            report.changes.append((ch.video_id, ch.new_title, ch.replaced))
+            report.changes.append((ch.video_id, ch.new_title))
         except Exception as e:  # noqa: BLE001 - one failure must not abort the batch
             log.exception("failed to retitle %s", ch.video_id)
             report.failures.append(f"{ch.video_id}: {e}")
@@ -66,7 +77,10 @@ def _execute(service, config, broadcasts, window_days, canonical=None, force_ids
 
 
 def run_job(service, config, statuses, window_days) -> JobReport:
-    """Single-source run over liveBroadcasts.list (back-compat / diagnostic path)."""
+    """Single-source run over liveBroadcasts.list (back-compat / diagnostic path).
+
+    Matches-only (no duration gate), so it never needs to fetch video lengths.
+    """
     broadcasts = _collect([lambda: youtube.list_broadcasts(service, statuses)])
     return _execute(service, config, broadcasts, window_days)
 
@@ -84,8 +98,7 @@ def weekly_job(service, config) -> JobReport:
         config,
         broadcasts,
         config.recent_window_days,
-        canonical=config.base_titles[0],
-        force_ids=config.force_retitle_ids,
+        min_worship_seconds=config.min_worship_minutes * 60,
     )
 
 
@@ -95,7 +108,7 @@ def review_unmatched(service, config) -> list[ReviewRow]:
         lambda: youtube.list_livestreams_via_uploads(service),
         lambda: youtube.list_broadcasts(service, ["completed"]),
     ]
-    broadcasts = _collect(sources)
+    broadcasts = _with_durations(service, _collect(sources))
     return find_unmatched(broadcasts, config.base_titles, config.timezone)
 
 
@@ -112,6 +125,5 @@ def backdate_all(service, config) -> JobReport:
         config,
         broadcasts,
         None,
-        canonical=config.base_titles[0],
-        force_ids=config.force_retitle_ids,
+        min_worship_seconds=config.min_worship_minutes * 60,
     )

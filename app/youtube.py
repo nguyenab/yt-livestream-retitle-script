@@ -121,6 +121,29 @@ def list_livestreams_via_uploads(service):
     return results
 
 
+def fetch_durations(service, video_ids):
+    """Return {video_id: duration_seconds} for the given ids via videos.list.
+
+    Batched 50 ids per call (1 quota unit each). Videos still processing may report a
+    zero/absent duration; callers treat unknown length as "not long enough".
+    """
+    from app.dates import parse_iso_duration
+
+    out: dict[str, int] = {}
+    ids = list(video_ids)
+    for start in range(0, len(ids), 50):
+        batch = ids[start : start + 50]
+        resp = (
+            service.videos()
+            .list(part="contentDetails", id=",".join(batch))
+            .execute(num_retries=_NUM_RETRIES)
+        )
+        for video in resp.get("items", []):
+            dur = video.get("contentDetails", {}).get("duration")
+            out[video["id"]] = parse_iso_duration(dur)
+    return out
+
+
 def get_video_snippet(service, video_id: str):
     resp = (
         service.videos()

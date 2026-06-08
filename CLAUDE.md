@@ -30,7 +30,7 @@ Runs on GitHub Actions — `.github/workflows/retitle.yml`:
 | `BASE_TITLES` | Title(s) to match, `||`-separated. Diacritics/case/whitespace-insensitive |
 
 `TIMEZONE` is hardcoded to `America/Los_Angeles` in the workflow. `RECENT_WINDOW_DAYS` (default
-7) and `DRY_RUN` can be set as env in the workflow if needed.
+7), `MIN_WORSHIP_MINUTES` (default 60), and `DRY_RUN` can be set as env in the workflow if needed.
 
 ## Commands (CLI; the workflow calls these)
 
@@ -44,40 +44,36 @@ Runs on GitHub Actions — `.github/workflows/retitle.yml`:
 | Lint | `make lint` (ruff) |
 
 Each `backdate`/`weekly` run prints its report and sends it to Telegram. `review` is
-read-only — it lists the livestreams that are neither dated nor on the allowlist (the
-candidates for the curated repair list), printing them to the Actions log and writing
-`review_candidates.csv` (uploaded as a workflow artifact). Each row carries a `weekday`
-column so non-Sunday streams (not worship services) are easy to filter out. Output path
-overridable via `REVIEW_OUTPUT_FILE`.
+read-only — it lists the livestreams that are neither dated nor on the allowlist,
+printing them to the Actions log and writing `review_candidates.csv` (uploaded as a
+workflow artifact). Each row carries `weekday` and `duration_min` columns so you can
+filter out non-Sunday streams and sanity-check the ≥`MIN_WORSHIP_MINUTES` cutoff. Output
+path overridable via `REVIEW_OUTPUT_FILE`.
 
 ## How it decides what to retitle
 
 1. List livestreams via `liveBroadcasts.list` unioned with the uploads playlist (filtered to
    videos with `liveStreamingDetails`), deduped by video id — never plain uploads.
 2. Skip any title that already starts with a date prefix (idempotent).
-3. Match remaining titles against `BASE_TITLES` (diacritic/case/whitespace-insensitive).
-   `BASE_TITLES` is an allowlist of titles that are already correct.
+3. A stream **qualifies** for a date prefix if its title is on the `BASE_TITLES` allowlist
+   (diacritic/case/whitespace-insensitive) **OR** its video runs at least
+   `MIN_WORSHIP_MINUTES` (default 60) — a full worship service, however it was titled.
 4. Prepend that stream's own date — `actualStartTime` (fallback `scheduledStartTime`),
-   converted **UTC → Pacific** — as `Weekday, Month Dayth, Year - `.
+   converted **UTC → Pacific** — as `Weekday, Month Dayth, Year - `. **The existing title
+   is always kept** (nothing is ever overwritten).
 
-Any title that is **not** on the allowlist is left untouched — the tool never guesses
-that an arbitrary title is a mis-titled worship stream, because many livestreams
-legitimately have their own titles (weekday studies, special events, etc.).
-
-### Curated repair list (`force_retitle_ids.txt`)
-
-For streams a team member **wrongly** retitled (e.g. pasted a sermon passage over a
-worship stream), list their video ids in `force_retitle_ids.txt` (one per line, `#`
-comments allowed). Each listed id is rewritten to `<its own broadcast date> -
-<canonical>`, where canonical is the **first** `BASE_TITLES` entry — regardless of its
-current title or any existing (wrong) date prefix. It's idempotent and exempt from the
-recency window. The Telegram report flags these replaced titles (`✎`) separately from
-dated-only ones (`•`). Replacement runs in `weekly` and `backdate` (not the `run_job`
-diagnostic path). Adding an id is a deliberate, version-controlled decision; the file
-path is overridable via `FORCE_RETITLE_IDS_FILE`.
+The duration gate is how mis-titled worship streams get fixed: a team member may have
+replaced the title with a sermon passage, but a 60+ minute livestream is a service, so it
+still gets dated. Short streams (sermon clips, test streams, `choir`) and anything already
+dated are left untouched. Duration comes from `videos.list contentDetails.duration`,
+fetched in one batched call per run; a stream still processing reports no length and is
+skipped that run (caught the next). Use `review` (read-only, with a duration column) to
+eyeball the cutoff before a real run.
 
 Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run a
-`backdate` with `DRY_RUN=true` first to preview before writing.
+`backdate` with `DRY_RUN=true` first to preview before writing. (A full backdate updates
+~200 titles, which can exceed the YouTube daily API quota; it's idempotent, so just re-run
+the next day to finish.)
 
 ## Architecture
 

@@ -5,27 +5,12 @@ from app.retitle import ReviewRow
 
 def test_format_report_summary_and_changes():
     r = JobReport(scanned=5, changed=2, skipped=3, dry_run=False)
-    r.changes = [("v1", "Sunday, May 10th, 2026 - Worship Service", False)]
+    r.changes = [("v1", "Sunday, May 10th, 2026 - Worship Service")]
     text = format_report("Weekly run", r)
     assert "Weekly run" in text
     assert "Scanned: 5" in text
     assert "Changed: 2" in text
     assert "Sunday, May 10th, 2026 - Worship Service" in text
-
-
-def test_format_report_marks_replaced_titles():
-    # Replaced (overwritten) titles are flagged distinctly from prefixed ones so the
-    # reader can eyeball every overwrite for mistakes.
-    r = JobReport(scanned=2, changed=2, skipped=0, dry_run=False)
-    r.changes = [
-        ("v1", "Sunday, May 10th, 2026 - Worship Service", False),
-        ("v2", "Sunday, May 3rd, 2026 - Worship Service", True),
-    ]
-    text = format_report("Backdate", r)
-    assert "Retitled (title replaced): 1" in text
-    # the replaced entry is marked differently from the prefixed one
-    assert "✎ Sunday, May 3rd, 2026 - Worship Service" in text
-    assert "• Sunday, May 10th, 2026 - Worship Service" in text
 
 
 def test_format_report_marks_dry_run_and_failures():
@@ -36,11 +21,12 @@ def test_format_report_marks_dry_run_and_failures():
     assert "v9: boom" in text
 
 
-def test_format_review_lists_candidates():
-    rows = [ReviewRow("abc", "Friday, May 8th, 2026", "Friday Bible Study", "2026-05-08T18:00:00Z")]
+def test_format_review_lists_candidates_with_duration():
+    rows = [ReviewRow("abc", "Friday, May 8th, 2026", "Friday Bible Study", "2026-05-08T18:00:00Z", 4200)]
     text = format_review(rows)
     assert "review candidates): 1" in text
     assert "Friday, May 8th, 2026" in text
+    assert "1h10m" in text  # 4200s
     assert "youtu.be/abc" in text
     assert "Friday Bible Study" in text
 
@@ -50,11 +36,12 @@ def test_format_review_handles_empty():
 
 
 def test_review_csv_rows_header_and_shape():
-    rows = [ReviewRow("abc", "Friday, May 8th, 2026", "Friday Bible Study", "2026-05-08T18:00:00Z")]
+    rows = [ReviewRow("abc", "Friday, May 8th, 2026", "Friday Bible Study", "2026-05-08T18:00:00Z", 4200)]
     out = review_csv_rows(rows)
     assert out[0] == [
         "weekday",
         "broadcast_date_pacific",
+        "duration_min",
         "video_id",
         "url",
         "current_title",
@@ -63,8 +50,14 @@ def test_review_csv_rows_header_and_shape():
     assert out[1] == [
         "Friday",
         "Friday, May 8th, 2026",
+        "70",
         "abc",
         "https://youtu.be/abc",
         "Friday Bible Study",
         "2026-05-08T18:00:00Z",
     ]
+
+
+def test_review_csv_rows_blank_duration_when_unknown():
+    rows = [ReviewRow("abc", "Friday, May 8th, 2026", "x", "2026-05-08T18:00:00Z", None)]
+    assert review_csv_rows(rows)[1][2] == ""

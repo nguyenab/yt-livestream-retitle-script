@@ -10,7 +10,7 @@ class FakeCfg:
     timezone: str = "America/Los_Angeles"
     recent_window_days: int = 7
     dry_run: bool = False
-    force_retitle_ids: frozenset = frozenset()
+    min_worship_minutes: int = 60
 
 
 BASE = "Worship Service"
@@ -64,18 +64,21 @@ def test_run_job_no_matches(monkeypatch):
     assert report.scanned == 1
 
 
-def test_backdate_force_id_replaces_non_matching(monkeypatch):
-    # A confirmed-mis-titled stream (in force_retitle_ids) is overwritten with canonical,
-    # while a sibling non-matching stream not on the list is left untouched.
+def test_backdate_dates_long_unmatched_keeps_short(monkeypatch):
+    # A >=60min sermon-titled stream is a worship service -> dated (title kept). A short
+    # clip is left alone. Both keep their original title; nothing is overwritten.
     monkeypatch.setattr(
         jobs.youtube,
         "list_livestreams_via_uploads",
         lambda svc: [
-            ("bad", "Romans 8:28 - Sermon", "2024-01-07T18:00:00Z"),
-            ("other", "Friday Bible Study", "2024-01-12T18:00:00Z"),
+            ("long", "Romans 8:28 - Sermon", "2024-01-07T18:00:00Z"),
+            ("short", "Sermon clip", "2024-01-12T18:00:00Z"),
         ],
     )
     monkeypatch.setattr(jobs.youtube, "list_broadcasts", lambda svc, statuses: [])
+    monkeypatch.setattr(
+        jobs.youtube, "fetch_durations", lambda svc, ids: {"long": 70 * 60, "short": 10 * 60}
+    )
     monkeypatch.setattr(
         jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": "x", "categoryId": "22"}
     )
@@ -83,9 +86,8 @@ def test_backdate_force_id_replaces_non_matching(monkeypatch):
     monkeypatch.setattr(
         jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append((vid, new))
     )
-    cfg = FakeCfg([BASE], force_retitle_ids=frozenset({"bad"}))
-    report = jobs.backdate_all(object(), cfg)
-    assert applied == [("bad", f"Sunday, January 7th, 2024 - {BASE}")]
+    report = jobs.backdate_all(object(), FakeCfg([BASE]))
+    assert applied == [("long", "Sunday, January 7th, 2024 - Romans 8:28 - Sermon")]
     assert report.changed == 1
 
 
@@ -99,6 +101,7 @@ def test_weekly_job_unions_sources_and_dedupes(monkeypatch):
         "list_livestreams_via_uploads",
         lambda svc: [("v1", BASE, "2026-05-10T18:00:00Z"), ("v2", BASE, "2026-05-10T18:00:00Z")],
     )
+    monkeypatch.setattr(jobs.youtube, "fetch_durations", lambda svc, ids: {})
     monkeypatch.setattr(jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": BASE, "categoryId": "22"})
     applied = []
     monkeypatch.setattr(jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append(vid))
@@ -119,6 +122,7 @@ def test_backdate_all_unions_uploads_and_completed(monkeypatch):
         "list_broadcasts",
         lambda svc, statuses: [("v1", BASE, "2024-01-07T18:00:00Z"), ("v2", BASE, "2024-01-14T18:00:00Z")],
     )
+    monkeypatch.setattr(jobs.youtube, "fetch_durations", lambda svc, ids: {})
     monkeypatch.setattr(jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": BASE, "categoryId": "22"})
     applied = []
     monkeypatch.setattr(jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append(vid))

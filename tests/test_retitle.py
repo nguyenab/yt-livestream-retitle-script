@@ -24,57 +24,45 @@ def test_decide_skips_non_matching_title():
     assert decide([b], [BASE], TZ) == []
 
 
-def test_decide_non_matching_left_alone_without_force():
-    # The safe default: an arbitrary non-matching title is NEVER guessed at.
-    b = Broadcast("vid1", "Romans 8:28 - The Goodness of God", "2026-05-10T18:00:00Z")
-    assert decide([b], [BASE], TZ, canonical=BASE) == []
+def test_decide_no_threshold_ignores_duration():
+    # Without min_worship_seconds it's matches-only; a long non-match is left alone.
+    b = Broadcast("v", "Long non-match", "2026-05-10T18:00:00Z", 99999)
+    assert decide([b], [BASE], TZ) == []
 
 
-def test_decide_force_id_rewrites_to_canonical():
-    # A curated, confirmed-mis-titled stream gets date + canonical regardless of title.
-    b = Broadcast("vid1", "Romans 8:28 - The Goodness of God", "2026-05-10T18:00:00Z")
-    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"}))
+def test_decide_long_nonmatching_gets_dated_keeping_title():
+    # A 70-min sermon-titled stream is a worship service -> date prefixed, title kept.
+    b = Broadcast("v", "Stand Firm - Mục Sư", "2026-05-10T18:00:00Z", 70 * 60)
+    changes = decide([b], [BASE], TZ, min_worship_seconds=3600)
     assert changes == [
-        Change(
-            "vid1",
-            "Romans 8:28 - The Goodness of God",
-            f"Sunday, May 10th, 2026 - {BASE}",
-            replaced=True,
-        )
+        Change("v", "Stand Firm - Mục Sư", "Sunday, May 10th, 2026 - Stand Firm - Mục Sư")
     ]
 
 
-def test_decide_force_id_overwrites_even_if_already_dated():
-    # A bad title that already carries a date prefix (wrong text) is still corrected.
-    dated_wrong = "Sunday, May 10th, 2026 - Romans 8:28"
-    b = Broadcast("vid1", dated_wrong, "2026-05-10T18:00:00Z")
-    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"}))
-    assert changes == [
-        Change("vid1", dated_wrong, f"Sunday, May 10th, 2026 - {BASE}", replaced=True)
-    ]
+def test_decide_short_nonmatching_left_alone():
+    b = Broadcast("v", "Sermon clip", "2026-05-10T18:00:00Z", 20 * 60)
+    assert decide([b], [BASE], TZ, min_worship_seconds=3600) == []
 
 
-def test_decide_force_id_is_idempotent():
-    # Once the title already equals the target, no change is emitted.
-    b = Broadcast("vid1", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z")
-    assert decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"})) == []
+def test_decide_unknown_duration_nonmatching_left_alone():
+    b = Broadcast("v", "Mystery", "2026-05-10T18:00:00Z", None)
+    assert decide([b], [BASE], TZ, min_worship_seconds=3600) == []
 
 
-def test_decide_force_id_exempt_from_window():
-    # Curated repairs apply even outside the recency window.
-    old = Broadcast("old", "Old Sermon Title", "2026-04-01T18:00:00Z")
+def test_decide_long_respects_window():
+    old = Broadcast("old", "Old long sermon", "2026-04-01T18:00:00Z", 70 * 60)
+    recent = Broadcast("new", "New long sermon", "2026-05-10T18:00:00Z", 70 * 60)
     changes = decide(
-        [old], [BASE], TZ, window_days=7, now_utc=NOW, canonical=BASE,
-        force_ids=frozenset({"old"}),
+        [old, recent], [BASE], TZ, window_days=7, now_utc=NOW, min_worship_seconds=3600
     )
-    assert [c.video_id for c in changes] == ["old"]
+    assert [c.video_id for c in changes] == ["new"]
 
 
-def test_decide_matching_still_date_only_with_force_configured():
-    # An allowlist match that isn't in force_ids keeps its title (date-only).
-    b = Broadcast("vid1", BASE, "2026-05-10T18:00:00Z")
-    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"other"}))
-    assert changes == [Change("vid1", BASE, f"Sunday, May 10th, 2026 - {BASE}", replaced=False)]
+def test_decide_matching_dated_regardless_of_duration():
+    # An allowlist match is dated even if short — it doesn't depend on the threshold.
+    b = Broadcast("v", BASE, "2026-05-10T18:00:00Z", 60)
+    changes = decide([b], [BASE], TZ, min_worship_seconds=3600)
+    assert changes == [Change("v", BASE, f"Sunday, May 10th, 2026 - {BASE}")]
 
 
 def test_find_unmatched_excludes_dated_and_matching():

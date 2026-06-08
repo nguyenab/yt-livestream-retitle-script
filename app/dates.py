@@ -9,6 +9,18 @@ DATE_PREFIX_RE = re.compile(
     r"^[A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}(?:st|nd|rd|th), \d{4} - "
 )
 
+# ISO-8601 duration, e.g. "PT1H2M3S", "PT59M", "P0D" (YouTube contentDetails.duration).
+_DURATION_RE = re.compile(r"^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$")
+
+
+def parse_iso_duration(s: str) -> int:
+    """Convert an ISO-8601 duration to whole seconds. Unparseable/empty -> 0."""
+    m = _DURATION_RE.match(s or "")
+    if not m:
+        return 0
+    days, hours, mins, secs = (int(x) if x else 0 for x in m.groups())
+    return days * 86400 + hours * 3600 + mins * 60 + secs
+
 
 def _ordinal(day: int) -> str:
     if 11 <= day % 100 <= 13:

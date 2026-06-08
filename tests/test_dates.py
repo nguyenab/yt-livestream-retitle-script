@@ -4,6 +4,7 @@ from app.dates import (
     _ordinal,
     format_date_prefix,
     has_date_prefix,
+    parse_iso_duration,
     parse_iso_utc,
     strip_date_prefix,
 )
@@ -68,3 +69,13 @@ def test_format_date_prefix_naive_datetime_treated_as_utc():
     # A tz-naive datetime must be interpreted as UTC, then converted to Pacific.
     naive = datetime(2026, 5, 11, 1, 30)  # == 2026-05-10 18:30 PDT
     assert format_date_prefix(naive, "America/Los_Angeles") == "Sunday, May 10th, 2026 - "
+
+
+def test_parse_iso_duration():
+    assert parse_iso_duration("PT1H") == 3600
+    assert parse_iso_duration("PT59M59S") == 3599
+    assert parse_iso_duration("PT2H1M5S") == 7265
+    assert parse_iso_duration("PT45S") == 45
+    assert parse_iso_duration("P0D") == 0
+    assert parse_iso_duration("") == 0
+    assert parse_iso_duration("garbage") == 0

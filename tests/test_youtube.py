@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from app.youtube import (
+    fetch_durations,
     get_video_snippet,
     list_broadcasts,
     list_livestreams_via_uploads,
@@ -184,3 +185,20 @@ def test_update_title_sets_title_and_preserves_snippet():
         "id": "v1",
         "snippet": {"title": "New", "categoryId": "22"},
     }
+
+
+def test_fetch_durations_parses_and_batches():
+    svc = MagicMock()
+    svc.videos.return_value.list.return_value.execute.return_value = {
+        "items": [
+            {"id": "v1", "contentDetails": {"duration": "PT1H10M"}},
+            {"id": "v2", "contentDetails": {"duration": "PT20M"}},
+        ]
+    }
+    assert fetch_durations(svc, ["v1", "v2"]) == {"v1": 4200, "v2": 1200}
+
+
+def test_fetch_durations_empty_ids_makes_no_call():
+    svc = MagicMock()
+    assert fetch_durations(svc, []) == {}
+    svc.videos.return_value.list.assert_not_called()
