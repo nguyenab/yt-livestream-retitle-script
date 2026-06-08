@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from app.retitle import Broadcast, Change, decide
+from app.retitle import Broadcast, Change, ReviewRow, decide, find_unmatched
 
 BASE = "Lễ thờ phượng - Worship Service - Hội Thánh Tin Lành Ân Điển"
 TZ = "America/Los_Angeles"
@@ -75,6 +75,25 @@ def test_decide_matching_still_date_only_with_force_configured():
     b = Broadcast("vid1", BASE, "2026-05-10T18:00:00Z")
     changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"other"}))
     assert changes == [Change("vid1", BASE, f"Sunday, May 10th, 2026 - {BASE}", replaced=False)]
+
+
+def test_find_unmatched_excludes_dated_and_matching():
+    rows = [
+        Broadcast("m", BASE, "2026-05-10T18:00:00Z"),  # on allowlist -> exclude
+        Broadcast("d", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z"),  # dated -> exclude
+        Broadcast("u", "Friday Bible Study", "2026-05-08T18:00:00Z"),  # the odd one out -> include
+    ]
+    out = find_unmatched(rows, [BASE], TZ)
+    assert out == [ReviewRow("u", "Friday, May 8th, 2026", "Friday Bible Study", "2026-05-08T18:00:00Z")]
+
+
+def test_find_unmatched_sorted_by_broadcast_time():
+    rows = [
+        Broadcast("later", "Special Event", "2026-05-10T18:00:00Z"),
+        Broadcast("earlier", "Guest Speaker", "2026-01-01T18:00:00Z"),
+    ]
+    out = find_unmatched(rows, [BASE], TZ)
+    assert [r.video_id for r in out] == ["earlier", "later"]
 
 
 def test_decide_window_excludes_old():

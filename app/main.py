@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
+import os
 import sys
 
 from app import telegram, youtube
 from app.config import load_config
-from app.jobs import backdate_all, weekly_job
-from app.notify import format_report
+from app.jobs import backdate_all, review_unmatched, weekly_job
+from app.notify import format_report, format_review, review_csv_rows
 
 log = logging.getLogger("yt-retitle")
 
@@ -30,9 +32,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="YouTube livestream auto-retitle")
     parser.add_argument(
         "command",
-        choices=["backdate", "weekly", "list"],
+        choices=["backdate", "weekly", "list", "review"],
         help="backdate (full history), weekly (recent window), "
-        "list (diagnostic: print livestreams each source returns; no changes)",
+        "list (diagnostic: print livestreams each source returns; no changes), "
+        "review (read-only: unmatched livestreams to a CSV + stdout; no changes)",
     )
     args = parser.parse_args()
 
@@ -51,6 +54,15 @@ def main() -> None:
             print(f"\n=== {label} — {len(rows)} ===")
             for vid, title, start in rows:
                 print(f"{start}  {vid}  {title}")
+        return
+
+    if args.command == "review":
+        rows = review_unmatched(svc, cfg)
+        print(format_review(rows))
+        path = os.getenv("REVIEW_OUTPUT_FILE", "review_candidates.csv").strip()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerows(review_csv_rows(rows))
+        log.info("wrote %d review rows to %s", len(rows), path)
         return
 
     fn = backdate_all if args.command == "backdate" else weekly_job

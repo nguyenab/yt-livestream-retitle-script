@@ -39,10 +39,16 @@ Runs on GitHub Actions — `.github/workflows/retitle.yml`:
 | Backdate full history | `python -m app.main backdate` |
 | Weekly (recent window) | `python -m app.main weekly` |
 | Diagnostic list | `python -m app.main list` (print livestreams each source returns; no changes) |
+| Review unmatched | `python -m app.main review` (read-only: unmatched livestreams → stdout + `review_candidates.csv`) |
 | Tests | `python -m pytest` |
 | Lint | `make lint` (ruff) |
 
-Each `backdate`/`weekly` run prints its report and sends it to Telegram.
+Each `backdate`/`weekly` run prints its report and sends it to Telegram. `review` is
+read-only — it lists the livestreams that are neither dated nor on the allowlist (the
+candidates for the curated repair list), printing them to the Actions log and writing
+`review_candidates.csv` (uploaded as a workflow artifact). Each row carries a `weekday`
+column so non-Sunday streams (not worship services) are easy to filter out. Output path
+overridable via `REVIEW_OUTPUT_FILE`.
 
 ## How it decides what to retitle
 

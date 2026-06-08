@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 
 from app import youtube
-from app.retitle import Broadcast, decide
+from app.retitle import Broadcast, ReviewRow, decide, find_unmatched
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +87,16 @@ def weekly_job(service, config) -> JobReport:
         canonical=config.base_titles[0],
         force_ids=config.force_retitle_ids,
     )
+
+
+def review_unmatched(service, config) -> list[ReviewRow]:
+    """Read-only scan of full history for livestreams worth a human look. No changes."""
+    sources = [
+        lambda: youtube.list_livestreams_via_uploads(service),
+        lambda: youtube.list_broadcasts(service, ["completed"]),
+    ]
+    broadcasts = _collect(sources)
+    return find_unmatched(broadcasts, config.base_titles, config.timezone)
 
 
 def backdate_all(service, config) -> JobReport:

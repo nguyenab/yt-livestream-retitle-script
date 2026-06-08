@@ -22,6 +22,32 @@ class Change:
     replaced: bool = False  # True when the original title was overwritten, not just dated
 
 
+@dataclass(frozen=True)
+class ReviewRow:
+    video_id: str
+    date_label: str  # the stream's own Pacific date, e.g. "Sunday, May 10th, 2026"
+    title: str  # current (unchanged) title
+    start_iso: str
+
+
+def find_unmatched(broadcasts: list[Broadcast], base_titles: list[str], tz: str) -> list[ReviewRow]:
+    """Read-only: the livestreams worth a human look — neither already dated nor on the
+    allowlist. Sorted oldest-first. The date label carries the weekday so non-Sunday
+    streams (which are not worship services) stand out at a glance. No changes implied.
+    """
+    rows: list[ReviewRow] = []
+    for b in broadcasts:
+        if has_date_prefix(b.title):
+            continue
+        if matches_any(b.title, base_titles):
+            continue
+        start = parse_iso_utc(b.start_iso)
+        label = format_date_prefix(start, tz).removesuffix(" - ")
+        rows.append(ReviewRow(b.video_id, label, b.title, b.start_iso))
+    rows.sort(key=lambda r: r.start_iso)
+    return rows
+
+
 def decide(
     broadcasts: list[Broadcast],
     base_titles: list[str],

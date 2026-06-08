@@ -15,6 +15,7 @@ on:
         options:
           - weekly
           - backdate
+          - review
       dry_run:
         description: "Preview only — log changes without editing titles"
         type: boolean
@@ -49,7 +50,16 @@ jobs:
           TIMEZONE: America/Los_Angeles
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
         # The CLI prints the report and sends it to Telegram as the "done" message.
+        # (review is read-only: it writes review_candidates.csv and prints to the log.)
         run: python -m app.main ${{ inputs.command || 'weekly' }}
+
+      - name: Upload review CSV
+        if: ${{ inputs.command == 'review' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-candidates
+          path: review_candidates.csv
+          if-no-files-found: warn
 
       - name: Notify Telegram on failure
         if: failure()
