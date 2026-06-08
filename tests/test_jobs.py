@@ -10,6 +10,7 @@ class FakeCfg:
     timezone: str = "America/Los_Angeles"
     recent_window_days: int = 7
     dry_run: bool = False
+    force_retitle_ids: frozenset = frozenset()
 
 
 BASE = "Worship Service"
@@ -61,6 +62,31 @@ def test_run_job_no_matches(monkeypatch):
     report = run_job(object(), FakeCfg([BASE]), ["all"], window_days=None)
     assert report.changed == 0
     assert report.scanned == 1
+
+
+def test_backdate_force_id_replaces_non_matching(monkeypatch):
+    # A confirmed-mis-titled stream (in force_retitle_ids) is overwritten with canonical,
+    # while a sibling non-matching stream not on the list is left untouched.
+    monkeypatch.setattr(
+        jobs.youtube,
+        "list_livestreams_via_uploads",
+        lambda svc: [
+            ("bad", "Romans 8:28 - Sermon", "2024-01-07T18:00:00Z"),
+            ("other", "Friday Bible Study", "2024-01-12T18:00:00Z"),
+        ],
+    )
+    monkeypatch.setattr(jobs.youtube, "list_broadcasts", lambda svc, statuses: [])
+    monkeypatch.setattr(
+        jobs.youtube, "get_video_snippet", lambda svc, vid: {"title": "x", "categoryId": "22"}
+    )
+    applied = []
+    monkeypatch.setattr(
+        jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append((vid, new))
+    )
+    cfg = FakeCfg([BASE], force_retitle_ids=frozenset({"bad"}))
+    report = jobs.backdate_all(object(), cfg)
+    assert applied == [("bad", f"Sunday, January 7th, 2024 - {BASE}")]
+    assert report.changed == 1
 
 
 def test_weekly_job_unions_sources_and_dedupes(monkeypatch):

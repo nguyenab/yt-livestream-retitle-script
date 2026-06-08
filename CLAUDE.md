@@ -53,15 +53,25 @@ Each `backdate`/`weekly` run prints its report and sends it to Telegram.
    `BASE_TITLES` is an allowlist of titles that are already correct.
 4. Prepend that stream's own date — `actualStartTime` (fallback `scheduledStartTime`),
    converted **UTC → Pacific** — as `Weekday, Month Dayth, Year - `.
-5. **Any other dateless livestream** (e.g. one a team member overwrote with a sermon
-   title) is rewritten to `<date> - <canonical>`, where canonical is the **first**
-   `BASE_TITLES` entry. This is safe because every source is livestream-only. The
-   Telegram report flags these replaced titles (`✎`) separately from dated-only ones
-   (`•`) so each overwrite can be eyeballed. Replacement runs in `weekly` and
-   `backdate` only (not the `run_job` diagnostic path).
+
+Any title that is **not** on the allowlist is left untouched — the tool never guesses
+that an arbitrary title is a mis-titled worship stream, because many livestreams
+legitimately have their own titles (weekday studies, special events, etc.).
+
+### Curated repair list (`force_retitle_ids.txt`)
+
+For streams a team member **wrongly** retitled (e.g. pasted a sermon passage over a
+worship stream), list their video ids in `force_retitle_ids.txt` (one per line, `#`
+comments allowed). Each listed id is rewritten to `<its own broadcast date> -
+<canonical>`, where canonical is the **first** `BASE_TITLES` entry — regardless of its
+current title or any existing (wrong) date prefix. It's idempotent and exempt from the
+recency window. The Telegram report flags these replaced titles (`✎`) separately from
+dated-only ones (`•`). Replacement runs in `weekly` and `backdate` (not the `run_job`
+diagnostic path). Adding an id is a deliberate, version-controlled decision; the file
+path is overridable via `FORCE_RETITLE_IDS_FILE`.
 
 Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run a
-`backdate` with `DRY_RUN=true` first to preview replacements before writing.
+`backdate` with `DRY_RUN=true` first to preview before writing.
 
 ## Architecture
 

@@ -33,9 +33,14 @@ def _collect(sources) -> list[Broadcast]:
     return broadcasts
 
 
-def _execute(service, config, broadcasts, window_days, canonical=None) -> JobReport:
+def _execute(service, config, broadcasts, window_days, canonical=None, force_ids=None) -> JobReport:
     changes = decide(
-        broadcasts, config.base_titles, config.timezone, window_days, canonical=canonical
+        broadcasts,
+        config.base_titles,
+        config.timezone,
+        window_days,
+        canonical=canonical,
+        force_ids=force_ids,
     )
     report = JobReport(
         scanned=len(broadcasts),
@@ -75,7 +80,12 @@ def weekly_job(service, config) -> JobReport:
     ]
     broadcasts = _collect(sources)
     return _execute(
-        service, config, broadcasts, config.recent_window_days, canonical=config.base_titles[0]
+        service,
+        config,
+        broadcasts,
+        config.recent_window_days,
+        canonical=config.base_titles[0],
+        force_ids=config.force_retitle_ids,
     )
 
 
@@ -87,4 +97,11 @@ def backdate_all(service, config) -> JobReport:
         lambda: youtube.list_broadcasts(service, ["completed"]),
     ]
     broadcasts = _collect(sources)
-    return _execute(service, config, broadcasts, None, canonical=config.base_titles[0])
+    return _execute(
+        service,
+        config,
+        broadcasts,
+        None,
+        canonical=config.base_titles[0],
+        force_ids=config.force_retitle_ids,
+    )

@@ -18,6 +18,7 @@ class Config:
     recent_window_days: int
     dry_run: bool
     log_level: str
+    force_retitle_ids: frozenset[str]
 
 
 def _require(name: str) -> str:
@@ -25,6 +26,26 @@ def _require(name: str) -> str:
     if not val:
         raise ValueError(f"Missing required env var: {name}")
     return val
+
+
+def _load_force_ids(path: str) -> frozenset[str]:
+    """Read a committed list of video ids to force-retitle (one per line).
+
+    Blank lines and ``#`` comments are ignored. Missing file -> empty set. These are
+    the streams you've explicitly confirmed were mis-titled; everything else is left
+    to the safe allowlist path.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return frozenset()
+    ids = set()
+    for line in lines:
+        token = line.split("#", 1)[0].strip()
+        if token:
+            ids.add(token)
+    return frozenset(ids)
 
 
 def load_config() -> Config:
@@ -41,4 +62,7 @@ def load_config() -> Config:
         recent_window_days=int(os.getenv("RECENT_WINDOW_DAYS", "7")),
         dry_run=os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes"),
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
+        force_retitle_ids=_load_force_ids(
+            os.getenv("FORCE_RETITLE_IDS_FILE", "force_retitle_ids.txt").strip()
+        ),
     )

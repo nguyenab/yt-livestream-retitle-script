@@ -24,10 +24,16 @@ def test_decide_skips_non_matching_title():
     assert decide([b], [BASE], TZ) == []
 
 
-def test_decide_replaces_non_matching_with_canonical():
-    # A mis-titled worship stream (sermon text as the title) gets date + canonical.
+def test_decide_non_matching_left_alone_without_force():
+    # The safe default: an arbitrary non-matching title is NEVER guessed at.
     b = Broadcast("vid1", "Romans 8:28 - The Goodness of God", "2026-05-10T18:00:00Z")
-    changes = decide([b], [BASE], TZ, canonical=BASE)
+    assert decide([b], [BASE], TZ, canonical=BASE) == []
+
+
+def test_decide_force_id_rewrites_to_canonical():
+    # A curated, confirmed-mis-titled stream gets date + canonical regardless of title.
+    b = Broadcast("vid1", "Romans 8:28 - The Goodness of God", "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"}))
     assert changes == [
         Change(
             "vid1",
@@ -38,24 +44,37 @@ def test_decide_replaces_non_matching_with_canonical():
     ]
 
 
-def test_decide_keeps_matching_title_even_with_canonical():
-    # A title already on the allowlist is preserved (just dated), not overwritten.
+def test_decide_force_id_overwrites_even_if_already_dated():
+    # A bad title that already carries a date prefix (wrong text) is still corrected.
+    dated_wrong = "Sunday, May 10th, 2026 - Romans 8:28"
+    b = Broadcast("vid1", dated_wrong, "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"}))
+    assert changes == [
+        Change("vid1", dated_wrong, f"Sunday, May 10th, 2026 - {BASE}", replaced=True)
+    ]
+
+
+def test_decide_force_id_is_idempotent():
+    # Once the title already equals the target, no change is emitted.
+    b = Broadcast("vid1", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z")
+    assert decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"vid1"})) == []
+
+
+def test_decide_force_id_exempt_from_window():
+    # Curated repairs apply even outside the recency window.
+    old = Broadcast("old", "Old Sermon Title", "2026-04-01T18:00:00Z")
+    changes = decide(
+        [old], [BASE], TZ, window_days=7, now_utc=NOW, canonical=BASE,
+        force_ids=frozenset({"old"}),
+    )
+    assert [c.video_id for c in changes] == ["old"]
+
+
+def test_decide_matching_still_date_only_with_force_configured():
+    # An allowlist match that isn't in force_ids keeps its title (date-only).
     b = Broadcast("vid1", BASE, "2026-05-10T18:00:00Z")
-    changes = decide([b], [BASE], TZ, canonical=BASE)
+    changes = decide([b], [BASE], TZ, canonical=BASE, force_ids=frozenset({"other"}))
     assert changes == [Change("vid1", BASE, f"Sunday, May 10th, 2026 - {BASE}", replaced=False)]
-
-
-def test_decide_replacement_respects_window():
-    old = Broadcast("old", "Some Sermon", "2026-04-01T18:00:00Z")
-    recent = Broadcast("new", "Other Sermon", "2026-05-10T18:00:00Z")
-    changes = decide([old, recent], [BASE], TZ, window_days=7, now_utc=NOW, canonical=BASE)
-    assert [c.video_id for c in changes] == ["new"]
-
-
-def test_decide_replacement_skips_already_dated():
-    dated = "Sunday, May 10th, 2026 - Romans 8:28"
-    b = Broadcast("vid1", dated, "2026-05-10T18:00:00Z")
-    assert decide([b], [BASE], TZ, canonical=BASE) == []
 
 
 def test_decide_window_excludes_old():

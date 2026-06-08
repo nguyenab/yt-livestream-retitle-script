@@ -37,6 +37,21 @@ def test_load_config_dry_run_true(monkeypatch):
     assert load_config().dry_run is True
 
 
+def test_load_config_reads_force_ids_file(monkeypatch, tmp_path):
+    f = tmp_path / "ids.txt"
+    f.write_text(
+        "# header comment\n\nabc123  # was a sermon title\nDEF_456\n",
+        encoding="utf-8",
+    )
+    _set(monkeypatch, FORCE_RETITLE_IDS_FILE=str(f))
+    assert load_config().force_retitle_ids == frozenset({"abc123", "DEF_456"})
+
+
+def test_load_config_force_ids_missing_file_is_empty(monkeypatch):
+    _set(monkeypatch, FORCE_RETITLE_IDS_FILE="/nonexistent/path/ids.txt")
+    assert load_config().force_retitle_ids == frozenset()
+
+
 def test_load_config_missing_required_raises(monkeypatch):
     _set(monkeypatch)
     monkeypatch.delenv("YOUTUBE_CLIENT_ID")
