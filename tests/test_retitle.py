@@ -24,6 +24,40 @@ def test_decide_skips_non_matching_title():
     assert decide([b], [BASE], TZ) == []
 
 
+def test_decide_replaces_non_matching_with_canonical():
+    # A mis-titled worship stream (sermon text as the title) gets date + canonical.
+    b = Broadcast("vid1", "Romans 8:28 - The Goodness of God", "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE)
+    assert changes == [
+        Change(
+            "vid1",
+            "Romans 8:28 - The Goodness of God",
+            f"Sunday, May 10th, 2026 - {BASE}",
+            replaced=True,
+        )
+    ]
+
+
+def test_decide_keeps_matching_title_even_with_canonical():
+    # A title already on the allowlist is preserved (just dated), not overwritten.
+    b = Broadcast("vid1", BASE, "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE)
+    assert changes == [Change("vid1", BASE, f"Sunday, May 10th, 2026 - {BASE}", replaced=False)]
+
+
+def test_decide_replacement_respects_window():
+    old = Broadcast("old", "Some Sermon", "2026-04-01T18:00:00Z")
+    recent = Broadcast("new", "Other Sermon", "2026-05-10T18:00:00Z")
+    changes = decide([old, recent], [BASE], TZ, window_days=7, now_utc=NOW, canonical=BASE)
+    assert [c.video_id for c in changes] == ["new"]
+
+
+def test_decide_replacement_skips_already_dated():
+    dated = "Sunday, May 10th, 2026 - Romans 8:28"
+    b = Broadcast("vid1", dated, "2026-05-10T18:00:00Z")
+    assert decide([b], [BASE], TZ, canonical=BASE) == []
+
+
 def test_decide_window_excludes_old():
     old = Broadcast("old", BASE, "2026-04-01T18:00:00Z")
     recent = Broadcast("new", BASE, "2026-05-10T18:00:00Z")

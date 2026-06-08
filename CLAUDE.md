@@ -50,10 +50,18 @@ Each `backdate`/`weekly` run prints its report and sends it to Telegram.
    videos with `liveStreamingDetails`), deduped by video id — never plain uploads.
 2. Skip any title that already starts with a date prefix (idempotent).
 3. Match remaining titles against `BASE_TITLES` (diacritic/case/whitespace-insensitive).
+   `BASE_TITLES` is an allowlist of titles that are already correct.
 4. Prepend that stream's own date — `actualStartTime` (fallback `scheduledStartTime`),
    converted **UTC → Pacific** — as `Weekday, Month Dayth, Year - `.
+5. **Any other dateless livestream** (e.g. one a team member overwrote with a sermon
+   title) is rewritten to `<date> - <canonical>`, where canonical is the **first**
+   `BASE_TITLES` entry. This is safe because every source is livestream-only. The
+   Telegram report flags these replaced titles (`✎`) separately from dated-only ones
+   (`•`) so each overwrite can be eyeballed. Replacement runs in `weekly` and
+   `backdate` only (not the `run_job` diagnostic path).
 
-Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history.
+Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run a
+`backdate` with `DRY_RUN=true` first to preview replacements before writing.
 
 ## Architecture
 

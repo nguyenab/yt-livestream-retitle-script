@@ -15,7 +15,8 @@ class JobReport:
     changed: int = 0
     skipped: int = 0
     failures: list[str] = field(default_factory=list)
-    changes: list[tuple[str, str]] = field(default_factory=list)  # (video_id, new_title)
+    # (video_id, new_title, replaced) — replaced=True means the title was overwritten
+    changes: list[tuple[str, str, bool]] = field(default_factory=list)
     dry_run: bool = False
 
 
@@ -32,8 +33,10 @@ def _collect(sources) -> list[Broadcast]:
     return broadcasts
 
 
-def _execute(service, config, broadcasts, window_days) -> JobReport:
-    changes = decide(broadcasts, config.base_titles, config.timezone, window_days)
+def _execute(service, config, broadcasts, window_days, canonical=None) -> JobReport:
+    changes = decide(
+        broadcasts, config.base_titles, config.timezone, window_days, canonical=canonical
+    )
     report = JobReport(
         scanned=len(broadcasts),
         skipped=len(broadcasts) - len(changes),
@@ -50,7 +53,7 @@ def _execute(service, config, broadcasts, window_days) -> JobReport:
                 youtube.update_title(service, ch.video_id, snippet, ch.new_title)
                 log.info("retitled %s -> %s", ch.video_id, ch.new_title)
             report.changed += 1
-            report.changes.append((ch.video_id, ch.new_title))
+            report.changes.append((ch.video_id, ch.new_title, ch.replaced))
         except Exception as e:  # noqa: BLE001 - one failure must not abort the batch
             log.exception("failed to retitle %s", ch.video_id)
             report.failures.append(f"{ch.video_id}: {e}")
@@ -71,7 +74,9 @@ def weekly_job(service, config) -> JobReport:
         lambda: youtube.list_livestreams_via_uploads(service),
     ]
     broadcasts = _collect(sources)
-    return _execute(service, config, broadcasts, config.recent_window_days)
+    return _execute(
+        service, config, broadcasts, config.recent_window_days, canonical=config.base_titles[0]
+    )
 
 
 def backdate_all(service, config) -> JobReport:
@@ -82,4 +87,4 @@ def backdate_all(service, config) -> JobReport:
         lambda: youtube.list_broadcasts(service, ["completed"]),
     ]
     broadcasts = _collect(sources)
-    return _execute(service, config, broadcasts, None)
+    return _execute(service, config, broadcasts, None, canonical=config.base_titles[0])
