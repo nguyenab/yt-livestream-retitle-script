@@ -1,30 +1,8 @@
-# Video ids of worship services a team member renamed with the sermon title.
-# Each is rewritten to '<its broadcast date> - <canonical>' (first BASE_TITLES entry),
-# discarding the sermon text. One id per line; '#' comments allowed. Idempotent.
-# Add future mis-titled service ids here (find them with `review`).
-
-735YQCq3uFg
-7AiaA-B6bsU
-7zZCI6uolhw
-8dgpcIA19Dc
-B-LKHkxhu_Y
-BCcwQFxz0GU
-H4-61P6_ISc
-Jc81phOtoME
-LnkJT4ivxJA
-UxpwnjcPaWE
-Z1bzogQR4VU
-_D6M_xto6tY
-a6acDTLCc6I
-aLkz643fOxc
-eJ1W78zLjX4
-epN3DN-f2SM
-hVEDGMGH6-I
-hZClUgyJQFo
-hpDqAka4_d8
-i24QnyHG5PM
-nM5ThGtFzgc
-ostkjG_7DVQ
-wC6w09FPDBs
-x7-Yl7_zmBk
-zwpg49no5jg
+# Video ids of worship-service livestreams a team member renamed with sermon text,
+# to be rewritten to "<date> - <canonical>". ONE id per line; '#' comments ok.
+#
+# IMPORTANT: do NOT list the church's trimmed sermon videos here. Those are titled
+# intentionally and live in the sermon playlist — they must keep their titles.
+#
+# (Empty: no confirmed mistakes pending. Add ids only after confirming they are NOT
+# in the sermon playlist.)
