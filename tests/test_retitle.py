@@ -65,6 +65,35 @@ def test_decide_matching_dated_regardless_of_duration():
     assert changes == [Change("v", BASE, f"Sunday, May 10th, 2026 - {BASE}")]
 
 
+# --- canonical mode: normalise qualifying streams to "<date> - <canonical>" ---
+
+
+def test_decide_canonical_overwrites_long_sermon_title():
+    b = Broadcast("v", "Stand Firm / Đứng vững - Mục Sư", "2026-05-10T18:00:00Z", 70 * 60)
+    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+    assert changes == [
+        Change("v", "Stand Firm / Đứng vững - Mục Sư", f"Sunday, May 10th, 2026 - {BASE}")
+    ]
+
+
+def test_decide_canonical_overwrites_already_dated_nonstandard_title():
+    # The partial-run case: a stream already dated with sermon text is normalised.
+    dated_sermon = "Sunday, May 10th, 2026 - Stand Firm - Mục Sư"
+    b = Broadcast("v", dated_sermon, "2026-05-10T18:00:00Z", 70 * 60)
+    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+    assert changes == [Change("v", dated_sermon, f"Sunday, May 10th, 2026 - {BASE}")]
+
+
+def test_decide_canonical_is_idempotent():
+    b = Broadcast("v", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z", 70 * 60)
+    assert decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600) == []
+
+
+def test_decide_canonical_skips_short_nonmatching():
+    b = Broadcast("v", "Sermon clip", "2026-05-10T18:00:00Z", 20 * 60)
+    assert decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600) == []
+
+
 def test_find_unmatched_excludes_dated_and_matching():
     rows = [
         Broadcast("m", BASE, "2026-05-10T18:00:00Z"),  # on allowlist -> exclude
@@ -112,3 +141,19 @@ def test_decide_window_excludes_stream_just_before_edge():
     b = Broadcast("v1", BASE, before_iso)
     changes = decide([b], [BASE], TZ, window_days=7, now_utc=now)
     assert changes == []
+
+
+def test_decide_skips_keep_title_over_100_chars():
+    # Keep-title path: a source title that, once dated, exceeds 100 chars is skipped
+    # rather than emitted (YouTube would reject it).
+    long_title = "x" * 90  # 90 + ~27 date prefix > 100
+    b = Broadcast("v", long_title, "2026-05-10T18:00:00Z")
+    assert decide([b], [long_title], TZ) == []
+
+
+def test_decide_canonical_fits_under_limit():
+    # Canonical normalisation keeps every title well under the limit even from a long source.
+    b = Broadcast("v", "y" * 95, "2026-05-10T18:00:00Z", 70 * 60)
+    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+    assert len(changes) == 1
+    assert len(changes[0].new_title) <= 100

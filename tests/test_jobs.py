@@ -87,7 +87,8 @@ def test_backdate_dates_long_unmatched_keeps_short(monkeypatch):
         jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append((vid, new))
     )
     report = jobs.backdate_all(object(), FakeCfg([BASE]))
-    assert applied == [("long", "Sunday, January 7th, 2024 - Romans 8:28 - Sermon")]
+    # long -> normalised to date + canonical (BASE); short clip untouched
+    assert applied == [("long", f"Sunday, January 7th, 2024 - {BASE}")]
     assert report.changed == 1
 
 

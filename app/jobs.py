@@ -43,7 +43,9 @@ def _with_durations(service, broadcasts: list[Broadcast]) -> list[Broadcast]:
     ]
 
 
-def _execute(service, config, broadcasts, window_days, min_worship_seconds=None) -> JobReport:
+def _execute(
+    service, config, broadcasts, window_days, canonical=None, min_worship_seconds=None
+) -> JobReport:
     if min_worship_seconds is not None:
         broadcasts = _with_durations(service, broadcasts)
     changes = decide(
@@ -51,6 +53,7 @@ def _execute(service, config, broadcasts, window_days, min_worship_seconds=None)
         config.base_titles,
         config.timezone,
         window_days,
+        canonical=canonical,
         min_worship_seconds=min_worship_seconds,
     )
     report = JobReport(
@@ -98,6 +101,7 @@ def weekly_job(service, config) -> JobReport:
         config,
         broadcasts,
         config.recent_window_days,
+        canonical=config.base_titles[0],
         min_worship_seconds=config.min_worship_minutes * 60,
     )
 
@@ -125,5 +129,6 @@ def backdate_all(service, config) -> JobReport:
         config,
         broadcasts,
         None,
+        canonical=config.base_titles[0],
         min_worship_seconds=config.min_worship_minutes * 60,
     )

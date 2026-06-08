@@ -55,20 +55,27 @@ path overridable via `REVIEW_OUTPUT_FILE`.
 1. List livestreams via `liveBroadcasts.list` unioned with the uploads playlist (filtered to
    videos with `liveStreamingDetails`), deduped by video id — never plain uploads.
 2. Skip any title that already starts with a date prefix (idempotent).
-3. A stream **qualifies** for a date prefix if its title is on the `BASE_TITLES` allowlist
+3. A stream **qualifies** if its title is on the `BASE_TITLES` allowlist
    (diacritic/case/whitespace-insensitive) **OR** its video runs at least
    `MIN_WORSHIP_MINUTES` (default 60) — a full worship service, however it was titled.
-4. Prepend that stream's own date — `actualStartTime` (fallback `scheduledStartTime`),
-   converted **UTC → Pacific** — as `Weekday, Month Dayth, Year - `. **The existing title
-   is always kept** (nothing is ever overwritten).
+4. Each qualifying stream is normalised to **`<date> - <canonical>`**: its own broadcast
+   date (`actualStartTime`, fallback `scheduledStartTime`, **UTC → Pacific**, as
+   `Weekday, Month Dayth, Year - `) plus the **canonical** title (the first `BASE_TITLES`
+   entry). This **overwrites** whatever was there — sermon text a team member pasted in, or
+   an old bracketed date — so every service is titled identically and stays under YouTube's
+   100-char title limit. Already-correct titles are skipped (idempotent), including ones
+   that already carry a date prefix.
 
-The duration gate is how mis-titled worship streams get fixed: a team member may have
-replaced the title with a sermon passage, but a 60+ minute livestream is a service, so it
-still gets dated. Short streams (sermon clips, test streams, `choir`) and anything already
-dated are left untouched. Duration comes from `videos.list contentDetails.duration`,
-fetched in one batched call per run; a stream still processing reports no length and is
-skipped that run (caught the next). Use `review` (read-only, with a duration column) to
-eyeball the cutoff before a real run.
+The duration gate is what catches mis-titled services: a 60+ minute livestream is a
+service even if its title was replaced with a sermon passage. Short streams (sermon clips,
+test streams, `choir`) never qualify and are left untouched. Duration comes from
+`videos.list contentDetails.duration`, fetched in one batched call per run; a stream still
+processing reports no length and is skipped that run (caught the next). Use `review`
+(read-only, with a duration column) to eyeball the cutoff before a real run.
+
+> **Title length:** YouTube rejects titles over 100 chars (`invalidTitle`). `<date> -
+> <canonical>` is well under it; `decide()` also defensively skips any target over
+> `MAX_TITLE_LEN` (100) so a run never fails on length.
 
 Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run a
 `backdate` with `DRY_RUN=true` first to preview before writing. (A full backdate updates
