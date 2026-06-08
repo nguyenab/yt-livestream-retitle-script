@@ -16,6 +16,7 @@ on:
           - weekly
           - backdate
           - review
+          - restore
       dry_run:
         description: "Preview only — log changes without editing titles"
         type: boolean

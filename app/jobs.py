@@ -43,18 +43,14 @@ def _with_durations(service, broadcasts: list[Broadcast]) -> list[Broadcast]:
     ]
 
 
-def _execute(
-    service, config, broadcasts, window_days, canonical=None, min_worship_seconds=None
-) -> JobReport:
-    if min_worship_seconds is not None:
-        broadcasts = _with_durations(service, broadcasts)
+def _execute(service, config, broadcasts, window_days, canonical=None) -> JobReport:
     changes = decide(
         broadcasts,
         config.base_titles,
         config.timezone,
         window_days,
         canonical=canonical,
-        min_worship_seconds=min_worship_seconds,
+        canonicalize_ids=config.canonicalize_ids,
     )
     report = JobReport(
         scanned=len(broadcasts),
@@ -102,8 +98,32 @@ def weekly_job(service, config) -> JobReport:
         broadcasts,
         config.recent_window_days,
         canonical=config.base_titles[0],
-        min_worship_seconds=config.min_worship_minutes * 60,
     )
+
+
+def restore_titles(service, config, overrides) -> JobReport:
+    """Set each ``(video_id, title)`` verbatim — a one-time un-do for titles a run
+    changed that it shouldn't have. Idempotent in practice (re-setting the same title
+    is harmless); continues past per-video failures like the retitle jobs.
+    """
+    report = JobReport(scanned=len(overrides), dry_run=config.dry_run)
+    for vid, title in overrides:
+        try:
+            if config.dry_run:
+                log.info("[DRY_RUN] would restore %s -> %s", vid, title)
+            else:
+                snippet = youtube.get_video_snippet(service, vid)
+                if snippet is None:
+                    raise RuntimeError("video not found")
+                youtube.update_title(service, vid, snippet, title)
+                log.info("restored %s -> %s", vid, title)
+            report.changed += 1
+            report.changes.append((vid, title))
+        except Exception as e:  # noqa: BLE001 - one failure must not abort the batch
+            log.exception("failed to restore %s", vid)
+            report.failures.append(f"{vid}: {e}")
+    report.skipped = report.scanned - report.changed
+    return report
 
 
 def review_unmatched(service, config) -> list[ReviewRow]:
@@ -130,5 +150,4 @@ def backdate_all(service, config) -> JobReport:
         broadcasts,
         None,
         canonical=config.base_titles[0],
-        min_worship_seconds=config.min_worship_minutes * 60,
     )

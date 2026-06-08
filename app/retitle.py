@@ -58,52 +58,42 @@ def decide(
     window_days: int | None = None,
     now_utc: datetime | None = None,
     canonical: str | None = None,
-    min_worship_seconds: int | None = None,
+    canonicalize_ids: frozenset[str] | None = None,
 ) -> list[Change]:
     """Return retitle changes for worship-service livestreams.
 
-    A stream **qualifies** if its title is on the ``base_titles`` allowlist OR (when
-    ``min_worship_seconds`` is set) it runs at least that long — a full worship
-    service, however it was titled. Short streams (sermon clips, test streams,
-    ``choir``) never qualify.
+    Two safe, narrow rules — we never guess that an arbitrary title is a mistake:
 
-    Target title:
-    - With ``canonical`` set, a qualifying stream is normalised to
-      ``<date> - <canonical>`` — its own broadcast date plus the standard service
-      title. This overwrites whatever was there (sermon text, an old bracketed date),
-      keeping every service titled identically and safely under YouTube's 100-char
-      limit. Already-correct titles are skipped (idempotent), including ones that
-      already carry a date prefix.
-    - Without ``canonical`` (the ``run_job`` diagnostic path), the existing title is
-      kept and only the date prefix is prepended; already-dated titles are skipped.
+    - **Allowlist match** (title is on ``base_titles``): prepend the stream's own date,
+      **keep the title**. Already-dated titles are skipped (idempotent). This is the
+      ongoing automatic behaviour for correctly-titled services.
+    - **Curated repair** (``video_id`` in ``canonicalize_ids``, with ``canonical`` set):
+      a service a team member renamed with sermon text. Rewritten to
+      ``<date> - <canonical>`` — its own date plus the standard title — overwriting
+      whatever was there (including an existing date prefix). Idempotent.
 
-    If window_days is set, only streams whose start time is within the last
-    window_days (relative to now_utc, default current UTC time) are considered.
+    Anything else is left untouched. If window_days is set, only streams whose start
+    time is within the last window_days (relative to now_utc) are considered.
     """
     changes: list[Change] = []
     ref = now_utc or datetime.now(UTC)
+    ids = canonicalize_ids or frozenset()
     for b in broadcasts:
-        long_enough = (
-            min_worship_seconds is not None
-            and b.duration_seconds is not None
-            and b.duration_seconds >= min_worship_seconds
-        )
-        if not (matches_any(b.title, base_titles) or long_enough):
+        listed = b.video_id in ids
+        if not (listed or matches_any(b.title, base_titles)):
             continue
         start = parse_iso_utc(b.start_iso)
         if window_days is not None and start < ref - timedelta(days=window_days):
             continue
         prefix = format_date_prefix(start, tz)
-        if canonical is not None:
+        if listed and canonical is not None:
             target = prefix + canonical
         else:
             if has_date_prefix(b.title):
                 continue
             target = prefix + b.title
         if b.title == target or len(target) > MAX_TITLE_LEN:
-            # Skip no-ops and anything YouTube would reject for length. With canonical
-            # set this never trips (date + standard title is well under the limit);
-            # it only guards the keep-title path against over-long source titles.
+            # Skip no-ops and anything YouTube would reject for length (>100 chars).
             continue
         changes.append(Change(b.video_id, b.title, target))
     return changes

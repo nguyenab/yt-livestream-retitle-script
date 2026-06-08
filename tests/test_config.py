@@ -37,14 +37,16 @@ def test_load_config_dry_run_true(monkeypatch):
     assert load_config().dry_run is True
 
 
-def test_load_config_min_worship_minutes_default(monkeypatch):
-    _set(monkeypatch)
-    assert load_config().min_worship_minutes == 60
+def test_load_config_canonicalize_ids_default_empty(monkeypatch):
+    _set(monkeypatch, CANONICALIZE_IDS_FILE="/nonexistent/path/ids.txt")
+    assert load_config().canonicalize_ids == frozenset()
 
 
-def test_load_config_min_worship_minutes_override(monkeypatch):
-    _set(monkeypatch, MIN_WORSHIP_MINUTES="45")
-    assert load_config().min_worship_minutes == 45
+def test_load_config_reads_canonicalize_ids_file(monkeypatch, tmp_path):
+    f = tmp_path / "ids.txt"
+    f.write_text("# header\n\nabc123  # a sermon-retitled service\nDEF_456\n", encoding="utf-8")
+    _set(monkeypatch, CANONICALIZE_IDS_FILE=str(f))
+    assert load_config().canonicalize_ids == frozenset({"abc123", "DEF_456"})
 
 
 def test_load_config_missing_required_raises(monkeypatch):

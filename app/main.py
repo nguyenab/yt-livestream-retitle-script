@@ -8,7 +8,7 @@ import sys
 
 from app import telegram, youtube
 from app.config import load_config
-from app.jobs import backdate_all, review_unmatched, weekly_job
+from app.jobs import backdate_all, restore_titles, review_unmatched, weekly_job
 from app.notify import format_report, format_review, review_csv_rows
 
 log = logging.getLogger("yt-retitle")
@@ -32,10 +32,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="YouTube livestream auto-retitle")
     parser.add_argument(
         "command",
-        choices=["backdate", "weekly", "list", "review"],
+        choices=["backdate", "weekly", "list", "review", "restore"],
         help="backdate (full history), weekly (recent window), "
         "list (diagnostic: print livestreams each source returns; no changes), "
-        "review (read-only: unmatched livestreams to a CSV + stdout; no changes)",
+        "review (read-only: unmatched livestreams to a CSV + stdout; no changes), "
+        "restore (set titles verbatim from restore_titles.csv — one-time un-do)",
     )
     args = parser.parse_args()
 
@@ -65,8 +66,14 @@ def main() -> None:
         log.info("wrote %d review rows to %s", len(rows), path)
         return
 
-    fn = backdate_all if args.command == "backdate" else weekly_job
-    report = fn(svc, cfg)
+    if args.command == "restore":
+        path = os.getenv("RESTORE_TITLES_FILE", "restore_titles.csv").strip()
+        with open(path, newline="", encoding="utf-8") as f:
+            overrides = [(r["video_id"], r["title"]) for r in csv.DictReader(f)]
+        report = restore_titles(svc, cfg, overrides)
+    else:
+        fn = backdate_all if args.command == "backdate" else weekly_job
+        report = fn(svc, cfg)
     text = format_report(args.command, report)
     print(text)
     try:

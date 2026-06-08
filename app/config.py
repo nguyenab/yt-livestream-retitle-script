@@ -18,7 +18,7 @@ class Config:
     recent_window_days: int
     dry_run: bool
     log_level: str
-    min_worship_minutes: int
+    canonicalize_ids: frozenset[str]
 
 
 def _require(name: str) -> str:
@@ -26,6 +26,21 @@ def _require(name: str) -> str:
     if not val:
         raise ValueError(f"Missing required env var: {name}")
     return val
+
+
+def _load_ids(path: str) -> frozenset[str]:
+    """Read a committed list of video ids (one per line, ``#`` comments ok).
+
+    Missing file -> empty set. Used for the curated canonicalize list — the services a
+    team member renamed with sermon text. Adding an id is a deliberate, reviewable edit.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return frozenset()
+    ids = {tok for line in lines if (tok := line.split("#", 1)[0].strip())}
+    return frozenset(ids)
 
 
 def load_config() -> Config:
@@ -42,5 +57,7 @@ def load_config() -> Config:
         recent_window_days=int(os.getenv("RECENT_WINDOW_DAYS", "7")),
         dry_run=os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes"),
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
-        min_worship_minutes=int(os.getenv("MIN_WORSHIP_MINUTES", "60")),
+        canonicalize_ids=_load_ids(
+            os.getenv("CANONICALIZE_IDS_FILE", "canonicalize_ids.txt").strip()
+        ),
     )

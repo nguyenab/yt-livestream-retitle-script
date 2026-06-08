@@ -29,8 +29,8 @@ Runs on GitHub Actions — `.github/workflows/retitle.yml`:
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Bot token + your chat id |
 | `BASE_TITLES` | Title(s) to match, `||`-separated. Diacritics/case/whitespace-insensitive |
 
-`TIMEZONE` is hardcoded to `America/Los_Angeles` in the workflow. `RECENT_WINDOW_DAYS` (default
-7), `MIN_WORSHIP_MINUTES` (default 60), and `DRY_RUN` can be set as env in the workflow if needed.
+`TIMEZONE` is hardcoded to `America/Los_Angeles` in the workflow. `RECENT_WINDOW_DAYS`
+(default 7) and `DRY_RUN` can be set as env in the workflow if needed.
 
 ## Commands (CLI; the workflow calls these)
 
@@ -40,47 +40,49 @@ Runs on GitHub Actions — `.github/workflows/retitle.yml`:
 | Weekly (recent window) | `python -m app.main weekly` |
 | Diagnostic list | `python -m app.main list` (print livestreams each source returns; no changes) |
 | Review unmatched | `python -m app.main review` (read-only: unmatched livestreams → stdout + `review_candidates.csv`) |
+| Restore titles | `python -m app.main restore` (set titles verbatim from `restore_titles.csv`; one-time un-do) |
 | Tests | `python -m pytest` |
 | Lint | `make lint` (ruff) |
 
-Each `backdate`/`weekly` run prints its report and sends it to Telegram. `review` is
-read-only — it lists the livestreams that are neither dated nor on the allowlist,
-printing them to the Actions log and writing `review_candidates.csv` (uploaded as a
-workflow artifact). Each row carries `weekday` and `duration_min` columns so you can
-filter out non-Sunday streams and sanity-check the ≥`MIN_WORSHIP_MINUTES` cutoff. Output
-path overridable via `REVIEW_OUTPUT_FILE`.
+Each `backdate`/`weekly`/`restore` run prints its report and sends it to Telegram.
+`review` is read-only — it lists livestreams that are neither dated nor on the allowlist,
+to the Actions log and `review_candidates.csv` (uploaded as a workflow artifact). Each row
+carries `weekday` and `duration_min` columns to help spot which unmatched streams are
+mis-titled services worth adding to the canonicalize list. Path overridable via
+`REVIEW_OUTPUT_FILE`.
 
 ## How it decides what to retitle
 
 1. List livestreams via `liveBroadcasts.list` unioned with the uploads playlist (filtered to
    videos with `liveStreamingDetails`), deduped by video id — never plain uploads.
-2. Skip any title that already starts with a date prefix (idempotent).
-3. A stream **qualifies** if its title is on the `BASE_TITLES` allowlist
-   (diacritic/case/whitespace-insensitive) **OR** its video runs at least
-   `MIN_WORSHIP_MINUTES` (default 60) — a full worship service, however it was titled.
-4. Each qualifying stream is normalised to **`<date> - <canonical>`**: its own broadcast
-   date (`actualStartTime`, fallback `scheduledStartTime`, **UTC → Pacific**, as
-   `Weekday, Month Dayth, Year - `) plus the **canonical** title (the first `BASE_TITLES`
-   entry). This **overwrites** whatever was there — sermon text a team member pasted in, or
-   an old bracketed date — so every service is titled identically and stays under YouTube's
-   100-char title limit. Already-correct titles are skipped (idempotent), including ones
-   that already carry a date prefix.
+2. Two narrow rules — we never guess that an arbitrary title is a mistake:
+   - **Allowlist match** (title on `BASE_TITLES`, diacritic/case/whitespace-insensitive):
+     prepend the stream's own date (`actualStartTime`, fallback `scheduledStartTime`,
+     **UTC → Pacific**, as `Weekday, Month Dayth, Year - `) and **keep the title**.
+     Already-dated titles are skipped (idempotent). This is the ongoing weekly behaviour.
+   - **Curated repair** (video id in **`canonicalize_ids.txt`**): a service a team member
+     renamed with sermon text. Rewritten to `<date> - <canonical>` (canonical = first
+     `BASE_TITLES` entry), overwriting whatever was there — including an existing date
+     prefix. Idempotent. Add ids here when `review` surfaces a new mis-titled service.
+3. Everything else is left untouched.
 
-The duration gate is what catches mis-titled services: a 60+ minute livestream is a
-service even if its title was replaced with a sermon passage. Short streams (sermon clips,
-test streams, `choir`) never qualify and are left untouched. Duration comes from
-`videos.list contentDetails.duration`, fetched in one batched call per run; a stream still
-processing reports no length and is skipped that run (caught the next). Use `review`
-(read-only, with a duration column) to eyeball the cutoff before a real run.
+Why a curated list and not a heuristic: most non-matching livestreams are *not* mistakes
+(services already titled `Worship Service [MM.DD.YYYY]`, plus special services like Good
+Friday / Easter with their own correct names). Only the regular Sunday services renamed
+with a sermon title are wrong, and those are enumerated explicitly in `canonicalize_ids.txt`
+(path overridable via `CANONICALIZE_IDS_FILE`).
 
 > **Title length:** YouTube rejects titles over 100 chars (`invalidTitle`). `<date> -
-> <canonical>` is well under it; `decide()` also defensively skips any target over
+> <canonical>` is well under it; `decide()` defensively skips any target over
 > `MAX_TITLE_LEN` (100) so a run never fails on length.
 
-Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run a
-`backdate` with `DRY_RUN=true` first to preview before writing. (A full backdate updates
-~200 titles, which can exceed the YouTube daily API quota; it's idempotent, so just re-run
-the next day to finish.)
+> **Restore:** `restore_titles.csv` (`video_id,title`) + the `restore` command set titles
+> back verbatim — used once to undo an over-broad run. Safe to delete once applied.
+
+Weekly run looks back `RECENT_WINDOW_DAYS`; backdate scans all history. Run with
+`DRY_RUN=true` first to preview. A large batch can exceed the YouTube daily API quota
+(~10k units, 50 per title update ≈ ~180 titles/day); every job is idempotent, so just
+re-run the next day to finish.
 
 ## Architecture
 

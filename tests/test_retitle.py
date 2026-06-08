@@ -24,74 +24,42 @@ def test_decide_skips_non_matching_title():
     assert decide([b], [BASE], TZ) == []
 
 
-def test_decide_no_threshold_ignores_duration():
-    # Without min_worship_seconds it's matches-only; a long non-match is left alone.
-    b = Broadcast("v", "Long non-match", "2026-05-10T18:00:00Z", 99999)
-    assert decide([b], [BASE], TZ) == []
+# --- curated canonicalize list: normalise listed ids to "<date> - <canonical>" ---
 
 
-def test_decide_long_nonmatching_gets_dated_keeping_title():
-    # A 70-min sermon-titled stream is a worship service -> date prefixed, title kept.
-    b = Broadcast("v", "Stand Firm - Mục Sư", "2026-05-10T18:00:00Z", 70 * 60)
-    changes = decide([b], [BASE], TZ, min_worship_seconds=3600)
-    assert changes == [
-        Change("v", "Stand Firm - Mục Sư", "Sunday, May 10th, 2026 - Stand Firm - Mục Sư")
-    ]
+def test_decide_unlisted_nonmatching_left_alone():
+    # We never guess: a non-matching title not on the canonicalize list is untouched.
+    b = Broadcast("v", "Some Sermon Title - Mục Sư", "2026-05-10T18:00:00Z")
+    assert decide([b], [BASE], TZ, canonical=BASE) == []
+    assert decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"other"})) == []
 
 
-def test_decide_short_nonmatching_left_alone():
-    b = Broadcast("v", "Sermon clip", "2026-05-10T18:00:00Z", 20 * 60)
-    assert decide([b], [BASE], TZ, min_worship_seconds=3600) == []
-
-
-def test_decide_unknown_duration_nonmatching_left_alone():
-    b = Broadcast("v", "Mystery", "2026-05-10T18:00:00Z", None)
-    assert decide([b], [BASE], TZ, min_worship_seconds=3600) == []
-
-
-def test_decide_long_respects_window():
-    old = Broadcast("old", "Old long sermon", "2026-04-01T18:00:00Z", 70 * 60)
-    recent = Broadcast("new", "New long sermon", "2026-05-10T18:00:00Z", 70 * 60)
-    changes = decide(
-        [old, recent], [BASE], TZ, window_days=7, now_utc=NOW, min_worship_seconds=3600
-    )
-    assert [c.video_id for c in changes] == ["new"]
-
-
-def test_decide_matching_dated_regardless_of_duration():
-    # An allowlist match is dated even if short — it doesn't depend on the threshold.
-    b = Broadcast("v", BASE, "2026-05-10T18:00:00Z", 60)
-    changes = decide([b], [BASE], TZ, min_worship_seconds=3600)
-    assert changes == [Change("v", BASE, f"Sunday, May 10th, 2026 - {BASE}")]
-
-
-# --- canonical mode: normalise qualifying streams to "<date> - <canonical>" ---
-
-
-def test_decide_canonical_overwrites_long_sermon_title():
-    b = Broadcast("v", "Stand Firm / Đứng vững - Mục Sư", "2026-05-10T18:00:00Z", 70 * 60)
-    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+def test_decide_canonicalize_id_overwrites_sermon_title():
+    b = Broadcast("v", "Stand Firm / Đứng vững - Mục Sư", "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"v"}))
     assert changes == [
         Change("v", "Stand Firm / Đứng vững - Mục Sư", f"Sunday, May 10th, 2026 - {BASE}")
     ]
 
 
-def test_decide_canonical_overwrites_already_dated_nonstandard_title():
+def test_decide_canonicalize_id_overwrites_already_dated_title():
     # The partial-run case: a stream already dated with sermon text is normalised.
     dated_sermon = "Sunday, May 10th, 2026 - Stand Firm - Mục Sư"
-    b = Broadcast("v", dated_sermon, "2026-05-10T18:00:00Z", 70 * 60)
-    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+    b = Broadcast("v", dated_sermon, "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"v"}))
     assert changes == [Change("v", dated_sermon, f"Sunday, May 10th, 2026 - {BASE}")]
 
 
-def test_decide_canonical_is_idempotent():
-    b = Broadcast("v", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z", 70 * 60)
-    assert decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600) == []
+def test_decide_canonicalize_id_is_idempotent():
+    b = Broadcast("v", f"Sunday, May 10th, 2026 - {BASE}", "2026-05-10T18:00:00Z")
+    assert decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"v"})) == []
 
 
-def test_decide_canonical_skips_short_nonmatching():
-    b = Broadcast("v", "Sermon clip", "2026-05-10T18:00:00Z", 20 * 60)
-    assert decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600) == []
+def test_decide_matched_keeps_title_even_with_canonicalize_configured():
+    # An allowlist match not on the list keeps its title (date-only), not overwritten.
+    b = Broadcast("v", BASE, "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"other"}))
+    assert changes == [Change("v", BASE, f"Sunday, May 10th, 2026 - {BASE}")]
 
 
 def test_find_unmatched_excludes_dated_and_matching():
@@ -153,7 +121,7 @@ def test_decide_skips_keep_title_over_100_chars():
 
 def test_decide_canonical_fits_under_limit():
     # Canonical normalisation keeps every title well under the limit even from a long source.
-    b = Broadcast("v", "y" * 95, "2026-05-10T18:00:00Z", 70 * 60)
-    changes = decide([b], [BASE], TZ, canonical=BASE, min_worship_seconds=3600)
+    b = Broadcast("v", "y" * 95, "2026-05-10T18:00:00Z")
+    changes = decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"v"}))
     assert len(changes) == 1
     assert len(changes[0].new_title) <= 100
