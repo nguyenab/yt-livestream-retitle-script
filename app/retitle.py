@@ -59,6 +59,7 @@ def decide(
     now_utc: datetime | None = None,
     canonical: str | None = None,
     canonicalize_ids: frozenset[str] | None = None,
+    protected_ids: frozenset[str] | None = None,
 ) -> list[Change]:
     """Return retitle changes for worship-service livestreams.
 
@@ -72,13 +73,17 @@ def decide(
       ``<date> - <canonical>`` — its own date plus the standard title — overwriting
       whatever was there (including an existing date prefix). Idempotent.
 
-    Anything else is left untouched. If window_days is set, only streams whose start
-    time is within the last window_days (relative to now_utc) are considered.
+    Any video in ``protected_ids`` (e.g. the trimmed-sermon playlist) is never touched,
+    no matter what. If window_days is set, only streams whose start time is within the
+    last window_days (relative to now_utc) are considered.
     """
     changes: list[Change] = []
     ref = now_utc or datetime.now(UTC)
     ids = canonicalize_ids or frozenset()
+    protected = protected_ids or frozenset()
     for b in broadcasts:
+        if b.video_id in protected:
+            continue
         listed = b.video_id in ids
         if not (listed or matches_any(b.title, base_titles)):
             continue

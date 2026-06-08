@@ -11,6 +11,7 @@ class FakeCfg:
     recent_window_days: int = 7
     dry_run: bool = False
     canonicalize_ids: frozenset = frozenset()
+    protect_playlist_ids: frozenset = frozenset()
 
 
 BASE = "Worship Service"
@@ -139,3 +140,18 @@ def test_backdate_all_unions_uploads_and_completed(monkeypatch):
     report = jobs.backdate_all(object(), FakeCfg([BASE]))
     assert report.scanned == 2  # v1 deduped across the two sources
     assert sorted(applied) == ["v1", "v2"]
+
+
+def test_protected_playlist_video_skipped(monkeypatch):
+    # A canonicalize-listed video that is also in the protected playlist is left alone.
+    monkeypatch.setattr(
+        jobs.youtube, "list_livestreams_via_uploads",
+        lambda svc: [("vid", "Sermon - Mục Sư", "2024-01-07T18:00:00Z")],
+    )
+    monkeypatch.setattr(jobs.youtube, "list_broadcasts", lambda svc, statuses: [])
+    monkeypatch.setattr(jobs.youtube, "list_playlist_video_ids", lambda svc, pid: {"vid"})
+    applied = []
+    monkeypatch.setattr(jobs.youtube, "update_title", lambda svc, vid, snip, new: applied.append(vid))
+    cfg = FakeCfg([BASE], canonicalize_ids=frozenset({"vid"}), protect_playlist_ids=frozenset({"PL1"}))
+    report = jobs.backdate_all(object(), cfg)
+    assert applied == [] and report.changed == 0

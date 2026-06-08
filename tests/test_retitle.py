@@ -125,3 +125,14 @@ def test_decide_canonical_fits_under_limit():
     changes = decide([b], [BASE], TZ, canonical=BASE, canonicalize_ids=frozenset({"v"}))
     assert len(changes) == 1
     assert len(changes[0].new_title) <= 100
+
+
+def test_decide_protected_ids_never_touched():
+    # A video in a protected playlist is skipped even if it'd otherwise be retitled.
+    matched = Broadcast("p1", BASE, "2026-05-10T18:00:00Z")
+    listed = Broadcast("p2", "Sermon - Mục Sư", "2026-05-10T18:00:00Z")
+    out = decide(
+        [matched, listed], [BASE], TZ, canonical=BASE,
+        canonicalize_ids=frozenset({"p2"}), protected_ids=frozenset({"p1", "p2"}),
+    )
+    assert out == []

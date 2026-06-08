@@ -50,6 +50,9 @@ jobs:
           BASE_TITLES: ${{ secrets.BASE_TITLES }}
           TIMEZONE: America/Los_Angeles
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          # Trimmed-sermon playlist: any video in it is never retitled. Read live each
+          # run, so videos added later are protected automatically. Comma-separate to add more.
+          PROTECT_PLAYLIST_IDS: PLlxtUhsfjSsrVHhjIA7YgnfNvB5sNiMmi
         # The CLI prints the report and sends it to Telegram as the "done" message.
         # (review is read-only: it writes review_candidates.csv and prints to the log.)
         run: python -m app.main ${{ inputs.command || 'weekly' }}

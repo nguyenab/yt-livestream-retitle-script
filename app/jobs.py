@@ -43,6 +43,16 @@ def _with_durations(service, broadcasts: list[Broadcast]) -> list[Broadcast]:
     ]
 
 
+def _protected_ids(service, config) -> frozenset[str]:
+    """Union of video ids in the protected playlists (e.g. trimmed sermons), read live
+    so additions to those playlists are honoured immediately. Empty config -> no API call.
+    """
+    ids: set[str] = set()
+    for pid in config.protect_playlist_ids:
+        ids |= youtube.list_playlist_video_ids(service, pid)
+    return frozenset(ids)
+
+
 def _execute(service, config, broadcasts, window_days, canonical=None) -> JobReport:
     changes = decide(
         broadcasts,
@@ -51,6 +61,7 @@ def _execute(service, config, broadcasts, window_days, canonical=None) -> JobRep
         window_days,
         canonical=canonical,
         canonicalize_ids=config.canonicalize_ids,
+        protected_ids=_protected_ids(service, config),
     )
     report = JobReport(
         scanned=len(broadcasts),
@@ -132,7 +143,10 @@ def review_unmatched(service, config) -> list[ReviewRow]:
         lambda: youtube.list_livestreams_via_uploads(service),
         lambda: youtube.list_broadcasts(service, ["completed"]),
     ]
-    broadcasts = _with_durations(service, _collect(sources))
+    protected = _protected_ids(service, config)
+    broadcasts = [
+        b for b in _with_durations(service, _collect(sources)) if b.video_id not in protected
+    ]
     return find_unmatched(broadcasts, config.base_titles, config.timezone)
 
 

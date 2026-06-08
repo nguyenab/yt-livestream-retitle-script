@@ -19,6 +19,7 @@ class Config:
     dry_run: bool
     log_level: str
     canonicalize_ids: frozenset[str]
+    protect_playlist_ids: frozenset[str]
 
 
 def _require(name: str) -> str:
@@ -59,5 +60,8 @@ def load_config() -> Config:
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
         canonicalize_ids=_load_ids(
             os.getenv("CANONICALIZE_IDS_FILE", "canonicalize_ids.txt").strip()
+        ),
+        protect_playlist_ids=frozenset(
+            p.strip() for p in os.getenv("PROTECT_PLAYLIST_IDS", "").split(",") if p.strip()
         ),
     )

@@ -121,6 +121,33 @@ def list_livestreams_via_uploads(service):
     return results
 
 
+def list_playlist_video_ids(service, playlist_id):
+    """Return the set of video ids currently in a playlist (read live each run, so
+    videos added to the playlist later are picked up automatically). Quota ~1/page.
+    """
+    ids: set[str] = set()
+    page_token = None
+    while True:
+        resp = (
+            service.playlistItems()
+            .list(
+                part="contentDetails",
+                playlistId=playlist_id,
+                maxResults=50,
+                pageToken=page_token,
+            )
+            .execute(num_retries=_NUM_RETRIES)
+        )
+        for item in resp.get("items", []):
+            vid = item.get("contentDetails", {}).get("videoId")
+            if vid:
+                ids.add(vid)
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return ids
+
+
 def fetch_durations(service, video_ids):
     """Return {video_id: duration_seconds} for the given ids via videos.list.
 

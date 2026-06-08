@@ -1,8 +1,31 @@
-# Video ids of worship-service livestreams a team member renamed with sermon text,
-# to be rewritten to "<date> - <canonical>". ONE id per line; '#' comments ok.
+# Worship-service livestreams a team member renamed with sermon text (>=1hr,
+# NOT trimmed). Each is rewritten to '<date> - <canonical>'. One id per line.
 #
-# IMPORTANT: do NOT list the church's trimmed sermon videos here. Those are titled
-# intentionally and live in the sermon playlist — they must keep their titles.
-#
-# (Empty: no confirmed mistakes pending. Add ids only after confirming they are NOT
-# in the sermon playlist.)
+# Trimmed sermons in the protected playlist are skipped automatically at runtime
+# (see PROTECT_PLAYLIST_IDS), so an id here that's actually a trimmed sermon is safe.
+
+735YQCq3uFg
+7AiaA-B6bsU
+7zZCI6uolhw
+8dgpcIA19Dc
+B-LKHkxhu_Y
+BCcwQFxz0GU
+H4-61P6_ISc
+Jc81phOtoME
+LnkJT4ivxJA
+UxpwnjcPaWE
+Z1bzogQR4VU
+_D6M_xto6tY
+a6acDTLCc6I
+aLkz643fOxc
+eJ1W78zLjX4
+epN3DN-f2SM
+hVEDGMGH6-I
+hZClUgyJQFo
+hpDqAka4_d8
+i24QnyHG5PM
+nM5ThGtFzgc
+ostkjG_7DVQ
+wC6w09FPDBs
+x7-Yl7_zmBk
+zwpg49no5jg
