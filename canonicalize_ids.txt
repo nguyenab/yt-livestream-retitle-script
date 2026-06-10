@@ -1,8 +1,7 @@
-# Worship-service livestreams a team member renamed with sermon text (>=1hr,
-# NOT trimmed). Each is rewritten to '<date> - <canonical>'. One id per line.
-#
-# Trimmed sermons in the protected playlist are skipped automatically at runtime
-# (see PROTECT_PLAYLIST_IDS), so an id here that's actually a trimmed sermon is safe.
+# Streams since Jan 2023 to standardise to '<date> - <canonical>' (canonical =
+# first BASE_TITLES entry: the full 'Lễ thờ phượng - Worship Service - ...' title).
+# Excludes named special services (Good Friday/Easter) and test streams by request.
+# Trimmed sermons in the protected playlist are skipped automatically at runtime.
 
 735YQCq3uFg
 7AiaA-B6bsU
@@ -10,9 +9,15 @@
 8dgpcIA19Dc
 B-LKHkxhu_Y
 BCcwQFxz0GU
+F2BtGFu5x2k
+FhA3pcBXduQ
 H4-61P6_ISc
+JOEV_Iiw2Rk
 Jc81phOtoME
 LnkJT4ivxJA
+Ok46zE1uGAY
+UgCV_lXOFFg
+UlFj8hNN1Ns
 UxpwnjcPaWE
 Z1bzogQR4VU
 _D6M_xto6tY
@@ -22,10 +27,11 @@ eJ1W78zLjX4
 epN3DN-f2SM
 hVEDGMGH6-I
 hZClUgyJQFo
+hmzmK6UsF2I
 hpDqAka4_d8
+i1PMQjU0ed0
 i24QnyHG5PM
 nM5ThGtFzgc
-ostkjG_7DVQ
 wC6w09FPDBs
 x7-Yl7_zmBk
 zwpg49no5jg
